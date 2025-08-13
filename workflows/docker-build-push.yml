@@ -1,0 +1,36 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  ACR_NAME: ${{ secrets.ACR_NAME }}
+  ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Log in to Azure
+      uses: azure/login@v2
+      with:
+        creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
+
+    - name: Log in to ACR
+      run: az acr login --name $ACR_NAME
+
+    - name: Build and push FastAPI (backend)
+      run: |
+        docker build -t $ACR_LOGIN_SERVER/backend:latest ./backend
+        docker push $ACR_LOGIN_SERVER/backend:latest
+
+    - name: Build and push React (frontend)
+      run: |
+        docker build -t $ACR_LOGIN_SERVER/frontend:latest ./frontend
+        docker push $ACR_LOGIN_SERVER/frontend:latest
