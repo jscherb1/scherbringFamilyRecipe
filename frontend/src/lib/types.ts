@@ -34,6 +34,8 @@ export interface Recipe {
   sourceUrl?: string;
   notes?: string;
   lastCookedAt?: string;
+  imageUrl?: string;
+  thumbnailUrl?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,6 +56,8 @@ export interface RecipeCreate {
   sourceUrl?: string;
   notes?: string;
   lastCookedAt?: string;
+  imageUrl?: string;
+  thumbnailUrl?: string;
 }
 
 export interface RecipeUpdate {
@@ -72,6 +76,8 @@ export interface RecipeUpdate {
   sourceUrl?: string;
   notes?: string;
   lastCookedAt?: string;
+  imageUrl?: string;
+  thumbnailUrl?: string;
 }
 
 export interface RecipeListResponse {

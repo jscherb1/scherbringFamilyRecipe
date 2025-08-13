@@ -98,8 +98,8 @@ class RecipeRepository:
             query_parts.append("AND c.mealType = @meal_type")
             parameters.append({"name": "@meal_type", "value": meal_type})
         
-        # Add ordering
-        query_parts.append("ORDER BY c.title")
+        # Remove ORDER BY to avoid CosmosDB query issues
+        # We'll sort the results in Python instead
         
         query = " ".join(query_parts)
         
@@ -109,6 +109,9 @@ class RecipeRepository:
             parameters=parameters,
             enable_cross_partition_query=True
         ))
+        
+        # Sort by title in Python (to avoid CosmosDB ORDER BY issues)
+        items.sort(key=lambda x: x.get('title', '').lower())
         
         # Manual pagination (Cosmos DB pagination is complex for this use case)
         total = len(items)
@@ -130,10 +133,11 @@ class RecipeRepository:
         """Update an existing recipe"""
         existing = await self.get_recipe(recipe_id)
         if not existing:
+            logger.error(f"Recipe {recipe_id} not found for update")
             return None
         
-        # Update fields
-        update_data = recipe_data.model_dump(exclude_unset=True)
+        # Update fields - use by_alias=False to get original field names
+        update_data = recipe_data.model_dump(exclude_unset=True, by_alias=False)
         for field, value in update_data.items():
             setattr(existing, field, value)
         
@@ -144,14 +148,21 @@ class RecipeRepository:
         if recipe_data.tags is not None:
             existing.tags = list(set(existing.tags))
         
-        container = self._get_container()
-        updated_item = container.replace_item(
-            item=recipe_id,
-            body=existing.model_dump()
-        )
-        
-        logger.info(f"Updated recipe: {recipe_id}")
-        return Recipe.from_cosmos_data(updated_item)
+        try:
+            container = self._get_container()
+            recipe_dict = existing.model_dump()  # Use camelCase aliases for Cosmos DB
+            
+            updated_item = container.replace_item(
+                item=recipe_id,
+                body=recipe_dict
+            )
+            
+            logger.info(f"Updated recipe: {recipe_id}")
+            return Recipe.from_cosmos_data(updated_item)
+            
+        except Exception as e:
+            logger.error(f"Error updating recipe {recipe_id} in CosmosDB: {e}")
+            raise
     
     async def delete_recipe(self, recipe_id: str) -> bool:
         """Delete a recipe"""

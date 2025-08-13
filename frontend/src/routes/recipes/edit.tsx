@@ -5,6 +5,7 @@ import { Input } from '../../components/ui/Input';
 import { Textarea } from '../../components/ui/Textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
+import { ImageUpload } from '../../components/ui/ImageUpload';
 import { Plus, X, Save, ArrowLeft } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { RecipeCreate, ProteinType, MealType } from '../../lib/types';
@@ -32,6 +33,11 @@ export function RecipeEdit() {
   const [rating, setRating] = useState<number | ''>('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [notes, setNotes] = useState('');
+  
+  // Image state
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | undefined>();
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [imageChanged, setImageChanged] = useState(false);
 
   useEffect(() => {
     if (isEditing && id) {
@@ -57,6 +63,7 @@ export function RecipeEdit() {
       setRating(recipe.rating || '');
       setSourceUrl(recipe.sourceUrl || '');
       setNotes(recipe.notes || '');
+      setCurrentImageUrl(recipe.imageUrl);
     } catch (error) {
       console.error('Failed to load recipe:', error);
       alert('Failed to load recipe');
@@ -74,29 +81,90 @@ export function RecipeEdit() {
       return;
     }
 
-    const recipeData: RecipeCreate = {
-      title: title.trim(),
-      description: description.trim() || undefined,
-      ingredients: ingredients.filter(i => i.trim()).map(i => i.trim()),
-      steps: steps.filter(s => s.trim()).map(s => s.trim()),
-      tags,
-      proteinType: proteinType || undefined,
-      mealType,
-      prepTimeMin: prepTimeMin ? Number(prepTimeMin) : undefined,
-      cookTimeMin: cookTimeMin ? Number(cookTimeMin) : undefined,
-      servings: servings ? Number(servings) : undefined,
-      rating: rating ? Number(rating) : undefined,
-      sourceUrl: sourceUrl.trim() || undefined,
-      notes: notes.trim() || undefined,
-    };
-
     try {
       setSaving(true);
+      
       if (isEditing && id) {
+        // Update existing recipe
+        const recipeData: RecipeCreate = {
+          title: title.trim(),
+          description: description.trim() || undefined,
+          ingredients: ingredients.filter(i => i.trim()).map(i => i.trim()),
+          steps: steps.filter(s => s.trim()).map(s => s.trim()),
+          tags,
+          proteinType: proteinType || undefined,
+          mealType,
+          prepTimeMin: prepTimeMin ? Number(prepTimeMin) : undefined,
+          cookTimeMin: cookTimeMin ? Number(cookTimeMin) : undefined,
+          servings: servings ? Number(servings) : undefined,
+          rating: rating ? Number(rating) : undefined,
+          sourceUrl: sourceUrl.trim() || undefined,
+          notes: notes.trim() || undefined,
+        };
+        
         await apiClient.updateRecipe(id, recipeData);
+        
+        // Handle image update if changed
+        if (imageChanged) {
+          if (selectedImageFile) {
+            await apiClient.uploadRecipeImage(id, selectedImageFile);
+          } else if (currentImageUrl && !selectedImageFile) {
+            // Remove image if it was deleted
+            await apiClient.deleteRecipeImage(id);
+          }
+        }
       } else {
-        await apiClient.createRecipe(recipeData);
+        // Create new recipe
+        console.log('Creating new recipe, selectedImageFile:', selectedImageFile);
+        
+        if (selectedImageFile) {
+          // Create recipe with image
+          console.log('Creating recipe with image');
+          const formData = new FormData();
+          formData.append('title', title.trim());
+          if (description.trim()) formData.append('description', description.trim());
+          formData.append('ingredients', JSON.stringify(ingredients.filter(i => i.trim()).map(i => i.trim())));
+          formData.append('steps', JSON.stringify(steps.filter(s => s.trim()).map(s => s.trim())));
+          formData.append('tags', JSON.stringify(tags));
+          if (proteinType) formData.append('protein_type', proteinType);
+          formData.append('meal_type', mealType);
+          if (prepTimeMin) formData.append('prep_time_min', String(prepTimeMin));
+          if (cookTimeMin) formData.append('cook_time_min', String(cookTimeMin));
+          if (servings) formData.append('servings', String(servings));
+          if (rating) formData.append('rating', String(rating));
+          if (sourceUrl.trim()) formData.append('source_url', sourceUrl.trim());
+          if (notes.trim()) formData.append('notes', notes.trim());
+          formData.append('image', selectedImageFile);
+          
+          console.log('FormData contents:');
+          for (let [key, value] of formData.entries()) {
+            console.log(key, value);
+          }
+          
+          await apiClient.createRecipeWithImage(formData);
+        } else {
+          // Create recipe without image
+          console.log('Creating recipe without image');
+          const recipeData: RecipeCreate = {
+            title: title.trim(),
+            description: description.trim() || undefined,
+            ingredients: ingredients.filter(i => i.trim()).map(i => i.trim()),
+            steps: steps.filter(s => s.trim()).map(s => s.trim()),
+            tags,
+            proteinType: proteinType || undefined,
+            mealType,
+            prepTimeMin: prepTimeMin ? Number(prepTimeMin) : undefined,
+            cookTimeMin: cookTimeMin ? Number(cookTimeMin) : undefined,
+            servings: servings ? Number(servings) : undefined,
+            rating: rating ? Number(rating) : undefined,
+            sourceUrl: sourceUrl.trim() || undefined,
+            notes: notes.trim() || undefined,
+          };
+          
+          await apiClient.createRecipe(recipeData);
+        }
       }
+      
       navigate('/recipes');
     } catch (error) {
       console.error('Failed to save recipe:', error);
@@ -136,6 +204,17 @@ export function RecipeEdit() {
     if (steps.length > 1) {
       setSteps(steps.filter((_, i) => i !== index));
     }
+  };
+
+  const handleImageSelect = (file: File | null) => {
+    setSelectedImageFile(file);
+    setImageChanged(true);
+  };
+
+  const handleImageRemove = () => {
+    setSelectedImageFile(null);
+    setCurrentImageUrl(undefined);
+    setImageChanged(true);
   };
 
   const addTag = () => {
@@ -205,6 +284,13 @@ export function RecipeEdit() {
                 rows={3}
               />
             </div>
+
+            <ImageUpload
+              currentImageUrl={currentImageUrl}
+              onImageSelect={handleImageSelect}
+              onImageRemove={handleImageRemove}
+              disabled={saving}
+            />
 
             <div className="grid gap-4 md:grid-cols-3">
               <div>

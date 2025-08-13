@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Header } from './components/Header';
 import { RecipeList } from './routes/recipes/list';
 import { RecipeEdit } from './routes/recipes/edit';
+import { RecipeDetail } from './routes/recipes/detail';
 import { PlannerIndex } from './routes/planner/index';
 import { PlannerHistory } from './routes/planner/history';
 import { ProfileSettings } from './routes/settings/profile';
@@ -16,6 +17,7 @@ function App() {
             <Route path="/" element={<Navigate to="/recipes" replace />} />
             <Route path="/recipes" element={<RecipeList />} />
             <Route path="/recipes/new" element={<RecipeEdit />} />
+            <Route path="/recipes/:id" element={<RecipeDetail />} />
             <Route path="/recipes/:id/edit" element={<RecipeEdit />} />
             <Route path="/planner" element={<PlannerIndex />} />
             <Route path="/planner/history" element={<PlannerHistory />} />

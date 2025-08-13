@@ -100,6 +100,47 @@ class ApiClient {
     });
   }
 
+  async createRecipeWithImage(formData: FormData): Promise<Recipe> {
+    const url = `${API_BASE_URL}/api/recipes/with-image`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData, // Don't set Content-Type header for FormData
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    
+    return response.json();
+  }
+
+  async uploadRecipeImage(id: string, file: File): Promise<Recipe> {
+    const formData = new FormData();
+    formData.append('image', file);
+    
+    const url = `${API_BASE_URL}/api/recipes/${id}/image`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    
+    return response.json();
+  }
+
+  async deleteRecipeImage(id: string): Promise<Recipe> {
+    return this.request<Recipe>(`/api/recipes/${id}/image`, {
+      method: 'DELETE',
+    });
+  }
+
   async updateRecipe(id: string, recipe: RecipeUpdate): Promise<Recipe> {
     return this.request<Recipe>(`/api/recipes/${id}`, {
       method: 'PATCH',

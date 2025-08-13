@@ -38,6 +38,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Configure response model to use aliases
+app.openapi_version = "3.0.2"
+
 # Debug middleware to log requests
 @app.middleware("http")
 async def log_requests(request: Request, call_next):

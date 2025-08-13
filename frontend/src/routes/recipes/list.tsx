@@ -200,11 +200,28 @@ export function RecipeList() {
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {recipes.map((recipe) => (
-            <Card key={recipe.id} className="hover:shadow-lg transition-shadow">
+            <Card key={recipe.id} className="hover:shadow-lg transition-shadow overflow-hidden">
+              {/* Recipe Image */}
+              {recipe.thumbnailUrl && (
+                <Link to={`/recipes/${recipe.id}`}>
+                  <div className="aspect-[16/9] overflow-hidden cursor-pointer">
+                    <img
+                      src={recipe.thumbnailUrl}
+                      alt={recipe.title}
+                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
+                    />
+                  </div>
+                </Link>
+              )}
+              
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <CardTitle className="text-lg line-clamp-2">{recipe.title}</CardTitle>
+                    <Link to={`/recipes/${recipe.id}`}>
+                      <CardTitle className="text-lg line-clamp-2 hover:text-blue-600 transition-colors cursor-pointer">
+                        {recipe.title}
+                      </CardTitle>
+                    </Link>
                     {recipe.description && (
                       <CardDescription className="mt-1 line-clamp-2">
                         {recipe.description}

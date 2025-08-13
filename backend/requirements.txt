@@ -2,6 +2,8 @@ fastapi[standard]
 pydantic==2.5.0
 pydantic-settings==2.1.0
 azure-cosmos==4.5.0
+azure-storage-blob==12.19.0
+pillow==10.1.0
 python-multipart
 uvicorn[standard]
 python-jose[cryptography]
