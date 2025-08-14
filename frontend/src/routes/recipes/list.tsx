@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -78,6 +78,12 @@ export function RecipeList() {
     loadTags();
   }, []);
 
+  const loadMoreRecipes = () => {
+    if (!loadingMore && hasMore) {
+      loadRecipes(false);
+    }
+  };
+
   // Infinite scroll implementation
   useEffect(() => {
     const handleScroll = () => {
@@ -89,19 +95,13 @@ export function RecipeList() {
 
       // Load more when user is 300px from bottom
       if (scrollTop + windowHeight >= documentHeight - 300) {
-        loadRecipes(false);
+        loadMoreRecipes();
       }
     };
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [loadingMore, hasMore, recipes.length, search, selectedTag, selectedProtein]);
-
-  const loadMoreRecipes = () => {
-    if (!loadingMore && hasMore) {
-      loadRecipes(false);
-    }
-  };
+  }, [loadingMore, hasMore]);
 
   const handleDeleteRecipe = async (id: string) => {
     if (!confirm('Are you sure you want to delete this recipe?')) return;
