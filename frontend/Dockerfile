@@ -16,8 +16,10 @@ COPY . .
 # Create a script to inject environment variables at runtime
 RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'echo "window._env_ = {" > /app/dist/env-config.js' >> /app/start.sh && \
-    echo 'echo "  REACT_APP_API_BASE_URL: \"$REACT_APP_API_BASE_URL\"," >> /app/dist/env-config.js' >> /app/start.sh && \
+    echo 'echo "  VITE_API_BASE_URL: \"$VITE_API_BASE_URL\"," >> /app/dist/env-config.js' >> /app/start.sh && \
     echo 'echo "};" >> /app/dist/env-config.js' >> /app/start.sh && \
+    echo '# Inject the script tag into index.html' >> /app/start.sh && \
+    echo 'sed -i "s|<head>|<head>\n    <script src=\"/env-config.js\"></script>|" /app/dist/index.html' >> /app/start.sh && \
     echo 'serve -s /app/dist -l 3000' >> /app/start.sh && \
     chmod +x /app/start.sh
 

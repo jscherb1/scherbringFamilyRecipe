@@ -1,0 +1,9 @@
+# Docker Compose for External Access (Codespaces)
+# Use this configuration when you need to access the app from external URLs
+
+services:
+  frontend:
+    environment:
+      # When accessing externally, use localhost:8000 since Docker port mapping
+      # makes the backend available on the host's port 8000
+      - REACT_APP_API_BASE_URL=http://localhost:8000

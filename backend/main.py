@@ -54,32 +54,46 @@ app.openapi_version = "3.0.2"
 
 # Dynamic CORS origins
 def get_cors_origins():
-    origins = ["http://localhost:3000"]  # Local development
+    origins = [
+        "http://localhost:3000",   # Local development (production frontend)
+        "http://localhost:5173",   # Local development (Vite dev server)
+        "http://frontend:3000",    # Docker compose service name
+    ]
     
-    # Add Codespaces URL if in Codespaces environment
+    # Add Codespaces URLs if in Codespaces environment
     codespace_name = os.getenv('CODESPACE_NAME')
     github_domain = os.getenv('GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN')
     
     if codespace_name and github_domain:
-        codespace_url = f"https://{codespace_name}-3000.{github_domain}"
-        origins.append(codespace_url)
+        # Add both production and dev server ports for Codespaces
+        codespace_3000 = f"https://{codespace_name}-3000.{github_domain}"
+        codespace_5173 = f"https://{codespace_name}-5173.{github_domain}"
+        origins.extend([codespace_3000, codespace_5173])
+        logger.info(f"Added Codespaces URLs: {codespace_3000}, {codespace_5173}")
     
-    # Allow any *.app.github.dev domain (common Codespaces pattern)
-    origins.extend([
-        "https://*.app.github.dev",
-        "https://*.preview.app.github.dev"
-    ])
+    # Add environment-specific origins
+    frontend_url = os.getenv('FRONTEND_URL')
+    if frontend_url:
+        origins.append(frontend_url)
+        logger.info(f"Added frontend URL from environment: {frontend_url}")
+    
+    # For Azure deployment - these will be set via environment variables
+    azure_frontend_url = os.getenv('AZURE_FRONTEND_URL')
+    if azure_frontend_url:
+        origins.append(azure_frontend_url)
+        logger.info(f"Added Azure frontend URL: {azure_frontend_url}")
     
     return origins
 
 # Configure CORS
 cors_origins = get_cors_origins()
+logger.info(f"CORS origins: {cors_origins}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For development
+    allow_origins=cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

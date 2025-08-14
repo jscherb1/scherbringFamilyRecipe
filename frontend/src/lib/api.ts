@@ -14,13 +14,27 @@ import {
 
 // Get API base URL dynamically
 const getApiBaseUrl = () => {
-  // Check if we have an environment variable set
+  // Check for runtime environment variable (Docker)
+  if (typeof window !== 'undefined' && (window as any)._env_?.VITE_API_BASE_URL) {
+    const envUrl = (window as any)._env_.VITE_API_BASE_URL;
+    
+    // If we're in Codespaces and the env URL is http://backend:8000, use the external HTTPS URL instead
+    if (window.location.hostname.includes('app.github.dev') && envUrl === 'http://backend:8000') {
+      const hostname = window.location.hostname;
+      const baseUrl = hostname.replace('-3000.', '-8000.');
+      return `https://${baseUrl}`;
+    }
+    
+    return envUrl;
+  }
+  
+  // Check for build-time environment variable (Vite)
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
   
   // Auto-detect Codespaces environment
-  if (window.location.hostname.includes('app.github.dev')) {
+  if (typeof window !== 'undefined' && window.location.hostname.includes('app.github.dev')) {
     const hostname = window.location.hostname;
     const baseUrl = hostname.replace('-3000.', '-8000.');
     return `https://${baseUrl}`;
@@ -84,7 +98,7 @@ class ApiClient {
     if (params?.pageSize) searchParams.append('page_size', params.pageSize.toString());
 
     const queryString = searchParams.toString();
-    const endpoint = `/api/recipes${queryString ? `?${queryString}` : ''}`;
+    const endpoint = `/api/recipes/${queryString ? `?${queryString}` : ''}`;
     
     return this.request<RecipeListResponse>(endpoint);
   }
@@ -94,7 +108,7 @@ class ApiClient {
   }
 
   async createRecipe(recipe: RecipeCreate): Promise<Recipe> {
-    return this.request<Recipe>('/api/recipes', {
+    return this.request<Recipe>('/api/recipes/', {
       method: 'POST',
       body: JSON.stringify(recipe),
     });
@@ -155,7 +169,7 @@ class ApiClient {
   }
 
   async getTags(): Promise<string[]> {
-    return this.request<string[]>('/api/tags');
+    return this.request<string[]>('/api/tags/');
   }
 
   // Meal Plans
@@ -167,7 +181,7 @@ class ApiClient {
   }
 
   async createMealPlan(mealPlan: any): Promise<MealPlan> {
-    return this.request<MealPlan>('/api/mealplans', {
+    return this.request<MealPlan>('/api/mealplans/', {
       method: 'POST',
       body: JSON.stringify(mealPlan),
     });
@@ -183,7 +197,7 @@ class ApiClient {
     if (params?.toDate) searchParams.append('to_date', params.toDate);
 
     const queryString = searchParams.toString();
-    const endpoint = `/api/mealplans${queryString ? `?${queryString}` : ''}`;
+    const endpoint = `/api/mealplans/${queryString ? `?${queryString}` : ''}`;
     
     return this.request<MealPlan[]>(endpoint);
   }
@@ -239,11 +253,11 @@ class ApiClient {
 
   // Profile
   async getProfile(): Promise<UserProfile> {
-    return this.request<UserProfile>('/api/profile');
+    return this.request<UserProfile>('/api/profile/');
   }
 
   async updateProfile(profile: UserProfileUpdate): Promise<UserProfile> {
-    return this.request<UserProfile>('/api/profile', {
+    return this.request<UserProfile>('/api/profile/', {
       method: 'PATCH',
       body: JSON.stringify(profile),
     });

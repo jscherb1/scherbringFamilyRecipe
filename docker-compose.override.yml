@@ -1,0 +1,14 @@
+# Docker Compose override for external access (Codespaces/Azure)
+# Uncomment and modify as needed for your deployment scenario
+
+# For external access where both containers are accessible via host ports:
+services:
+  frontend:
+    environment:
+      # Use this when both frontend and backend are accessible via external URLs
+      - REACT_APP_API_BASE_URL=http://localhost:8000
+      
+  # Uncomment to set custom CORS origins for backend
+  # backend:
+  #   environment:
+  #     - FRONTEND_URL=https://your-custom-frontend-url.com
