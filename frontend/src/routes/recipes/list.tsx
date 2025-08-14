@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -12,30 +12,52 @@ import { getProteinTypeColor, getTagColor, formatTime } from '../../lib/utils';
 export function RecipeList() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedTag, setSelectedTag] = useState<string>('');
   const [selectedProtein, setSelectedProtein] = useState<ProteinType | ''>('');
   const [tags, setTags] = useState<string[]>([]);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalRecipes, setTotalRecipes] = useState(0);
 
-  const loadRecipes = async () => {
+  const loadRecipes = async (resetList = true) => {
     try {
-      setLoading(true);
+      if (resetList) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
+      const currentPage = resetList ? 1 : page + 1;
       const response = await apiClient.getRecipes({
         search: search || undefined,
         tag: selectedTag || undefined,
         proteinType: selectedProtein || undefined,
-        page,
-        pageSize: 12
+        page: currentPage,
+        pageSize: 20
       });
       
-      setRecipes(response.recipes);
-      setTotalPages(response.totalPages);
+      if (resetList) {
+        setRecipes(response.recipes);
+        setPage(1);
+        setTotalRecipes(response.total);
+        setHasMore(response.recipes.length < response.total && response.recipes.length > 0);
+      } else {
+        setRecipes(prev => {
+          const newRecipes = [...prev, ...response.recipes];
+          setTotalRecipes(response.total);
+          setHasMore(newRecipes.length < response.total && response.recipes.length > 0);
+          return newRecipes;
+        });
+        setPage(currentPage);
+      }
+      
     } catch (error) {
       console.error('Failed to load recipes:', error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -49,12 +71,37 @@ export function RecipeList() {
   };
 
   useEffect(() => {
-    loadRecipes();
-  }, [search, selectedTag, selectedProtein, page]);
+    loadRecipes(true);
+  }, [search, selectedTag, selectedProtein]);
 
   useEffect(() => {
     loadTags();
   }, []);
+
+  const loadMoreRecipes = () => {
+    if (!loadingMore && hasMore) {
+      loadRecipes(false);
+    }
+  };
+
+  // Infinite scroll implementation
+  useEffect(() => {
+    const handleScroll = () => {
+      if (loadingMore || !hasMore) return;
+
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      const windowHeight = window.innerHeight;
+      const documentHeight = document.documentElement.scrollHeight;
+
+      // Load more when user is 300px from bottom
+      if (scrollTop + windowHeight >= documentHeight - 300) {
+        loadMoreRecipes();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [loadingMore, hasMore]);
 
   const handleDeleteRecipe = async (id: string) => {
     if (!confirm('Are you sure you want to delete this recipe?')) return;
@@ -305,26 +352,38 @@ export function RecipeList() {
         </div>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center space-x-2">
-          <Button
-            variant="outline"
-            disabled={page === 1}
-            onClick={() => setPage(page - 1)}
-          >
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            disabled={page === totalPages}
-            onClick={() => setPage(page + 1)}
-          >
-            Next
-          </Button>
+      {/* Load More / Loading Indicator */}
+      {(hasMore || loadingMore) && (
+        <div className="flex flex-col items-center space-y-4">
+          {recipes.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Showing {recipes.length} of {totalRecipes} recipes
+            </p>
+          )}
+          
+          {loadingMore ? (
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+              <p className="mt-2 text-muted-foreground">Loading more recipes...</p>
+            </div>
+          ) : hasMore ? (
+            <Button 
+              variant="outline" 
+              onClick={loadMoreRecipes}
+              className="min-w-[120px]"
+            >
+              Load More
+            </Button>
+          ) : null}
+        </div>
+      )}
+      
+      {/* Show completion message when all recipes are loaded */}
+      {!hasMore && recipes.length > 0 && !loadingMore && (
+        <div className="text-center py-4">
+          <p className="text-sm text-muted-foreground">
+            You've reached the end! All {totalRecipes} recipes loaded.
+          </p>
         </div>
       )}
     </div>
