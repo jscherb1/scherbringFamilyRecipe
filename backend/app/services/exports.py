@@ -2,8 +2,10 @@ import csv
 import json
 from io import StringIO
 from typing import Dict, Any, List
-from datetime import date
+from datetime import date, datetime
 import logging
+import re
+from collections import defaultdict
 from app.models.meal_plan import MealPlan
 from app.models.recipe import Recipe
 from app.repositories.recipes import recipe_repository
@@ -130,6 +132,155 @@ class ExportService:
                 lines.append("")
         
         return "\n".join(lines)
+    
+    async def export_consolidated_ingredients(self, meal_plan: MealPlan) -> str:
+        """Export consolidated ingredient list for copying to todo apps"""
+        
+        # Get recipes for the meal plan
+        recipe_map = await self._get_recipe_map(meal_plan)
+        
+        # Collect and consolidate ingredients
+        ingredient_counts = defaultdict(int)
+        ingredient_base_names = {}  # Track the base name for similar ingredients
+        
+        for entry in meal_plan.entries:
+            recipe = recipe_map.get(entry.recipe_id) if entry.recipe_id else None
+            
+            if recipe and recipe.ingredients:
+                for ingredient in recipe.ingredients:
+                    # Normalize ingredient for consolidation
+                    normalized = self._normalize_ingredient(ingredient)
+                    base_name = self._extract_base_ingredient(normalized)
+                    
+                    if base_name not in ingredient_base_names:
+                        ingredient_base_names[base_name] = ingredient
+                    
+                    ingredient_counts[base_name] += 1
+        
+        # Format for todo app
+        lines = []
+        lines.append(f"Shopping List - Week of {meal_plan.week_start_date.strftime('%B %d, %Y')}")
+        lines.append("")
+        
+        # Sort ingredients alphabetically
+        for base_name in sorted(ingredient_counts.keys()):
+            count = ingredient_counts[base_name]
+            original_ingredient = ingredient_base_names[base_name]
+            
+            if count > 1:
+                lines.append(f"• {original_ingredient} (needed for {count} recipes)")
+            else:
+                lines.append(f"• {original_ingredient}")
+        
+        return "\n".join(lines)
+    
+    async def export_meal_plan_ics(self, meal_plan: MealPlan) -> str:
+        """Export meal plan as ICS calendar file for Google Calendar"""
+        
+        # Get recipes for the meal plan
+        recipe_map = await self._get_recipe_map(meal_plan)
+        
+        lines = []
+        lines.append("BEGIN:VCALENDAR")
+        lines.append("VERSION:2.0")
+        lines.append("PRODID:-//Scherbring Family Recipe//Meal Plan//EN")
+        lines.append("CALSCALE:GREGORIAN")
+        
+        # Add each meal as an all-day event
+        for entry in meal_plan.entries:
+            recipe = recipe_map.get(entry.recipe_id) if entry.recipe_id else None
+            
+            if recipe:
+                # Create unique event ID
+                event_id = f"meal-{meal_plan.id}-{entry.date}-{recipe.id}"
+                
+                # Format date for ICS (YYYYMMDD for all-day events)
+                event_date = entry.date.strftime('%Y%m%d')
+                
+                # Create event
+                lines.append("BEGIN:VEVENT")
+                lines.append(f"UID:{event_id}@scherbringfamilyrecipe.com")
+                lines.append(f"DTSTART;VALUE=DATE:{event_date}")
+                lines.append(f"DTEND;VALUE=DATE:{event_date}")
+                lines.append(f"SUMMARY:{recipe.title}")
+                
+                # Build description with ingredients, steps, and URL
+                description_parts = []
+                
+                if recipe.ingredients:
+                    description_parts.append("INGREDIENTS:")
+                    for ingredient in recipe.ingredients:
+                        description_parts.append(f"• {ingredient}")
+                    description_parts.append("")
+                
+                if recipe.steps:
+                    description_parts.append("INSTRUCTIONS:")
+                    for i, step in enumerate(recipe.steps, 1):
+                        description_parts.append(f"{i}. {step}")
+                    description_parts.append("")
+                
+                if recipe.source_url:
+                    description_parts.append(f"Recipe URL: {recipe.source_url}")
+                
+                # ICS requires line folding for long descriptions
+                description = "\\n".join(description_parts)
+                description = self._fold_ics_line(f"DESCRIPTION:{description}")
+                lines.extend(description)
+                
+                # Add creation timestamp
+                now = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+                lines.append(f"DTSTAMP:{now}")
+                lines.append(f"CREATED:{now}")
+                
+                lines.append("END:VEVENT")
+        
+        lines.append("END:VCALENDAR")
+        
+        return "\r\n".join(lines)  # ICS files use CRLF line endings
+    
+    def _normalize_ingredient(self, ingredient: str) -> str:
+        """Normalize ingredient text for comparison"""
+        return ingredient.lower().strip()
+    
+    def _extract_base_ingredient(self, ingredient: str) -> str:
+        """Extract the base ingredient name for consolidation"""
+        # Remove common measurements and descriptors
+        # This is a simple version - could be made more sophisticated
+        ingredient = re.sub(r'^\d+\s*(cups?|tbsp|tsp|lbs?|oz|pounds?|ounces?|cloves?|cans?|packages?)\s+', '', ingredient)
+        ingredient = re.sub(r'\s*(large|small|medium|fresh|dried|chopped|diced|sliced|minced)\s*', ' ', ingredient)
+        ingredient = re.sub(r'\s+', ' ', ingredient).strip()
+        
+        # Take first few words as the base ingredient
+        words = ingredient.split()
+        if len(words) <= 2:
+            return ingredient
+        else:
+            return ' '.join(words[:2])
+    
+    def _fold_ics_line(self, line: str) -> List[str]:
+        """Fold ICS lines to 75 characters as required by RFC 5545"""
+        if len(line) <= 75:
+            return [line]
+        
+        folded = []
+        current = line
+        
+        while len(current) > 75:
+            # Find a good break point (prefer spaces)
+            break_point = 74
+            while break_point > 60 and current[break_point] != ' ':
+                break_point -= 1
+            
+            if break_point <= 60:
+                break_point = 74
+            
+            folded.append(current[:break_point + 1])
+            current = ' ' + current[break_point + 1:]  # Continuation lines start with space
+        
+        if current.strip():
+            folded.append(current)
+        
+        return folded
     
     async def _get_recipe_map(self, meal_plan: MealPlan) -> Dict[str, Recipe]:
         """Get a map of recipe IDs to Recipe objects for the meal plan"""

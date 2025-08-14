@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
-import { Calendar, ArrowLeft, Trash2, Eye } from 'lucide-react';
+import { Input } from '../../components/ui/Input';
+import { Textarea } from '../../components/ui/Textarea';
+import { Calendar, ArrowLeft, Trash2, Eye, ShoppingCart, Download, Copy, X } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { MealPlan, Recipe } from '../../lib/types';
 import { formatDate } from '../../lib/utils';
@@ -13,6 +15,11 @@ export function PlannerHistory() {
   const [plans, setPlans] = useState<MealPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedPlan, setExpandedPlan] = useState<string | null>(null);
+  
+  // Export modal states
+  const [showIngredientsModal, setShowIngredientsModal] = useState(false);
+  const [ingredientsText, setIngredientsText] = useState('');
+  const [loadingIngredients, setLoadingIngredients] = useState(false);
 
   useEffect(() => {
     loadPlans();
@@ -49,6 +56,47 @@ export function PlannerHistory() {
 
   const togglePlanDetails = (planId: string) => {
     setExpandedPlan(expandedPlan === planId ? null : planId);
+  };
+
+  const exportIngredients = async (planId: string) => {
+    try {
+      setLoadingIngredients(true);
+      const response = await apiClient.exportConsolidatedIngredients(planId);
+      setIngredientsText(response.ingredients);
+      setShowIngredientsModal(true);
+    } catch (error) {
+      console.error('Failed to export ingredients:', error);
+      alert('Failed to export ingredients. Please try again.');
+    } finally {
+      setLoadingIngredients(false);
+    }
+  };
+
+  const exportIcsFile = async (planId: string) => {
+    try {
+      const blob = await apiClient.exportMealPlanIcs(planId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `meal-plan-${planId}.ics`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Failed to export ICS file:', error);
+      alert('Failed to export calendar file. Please try again.');
+    }
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('Copied to clipboard!');
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+      alert('Failed to copy to clipboard. Please select and copy manually.');
+    }
   };
 
   if (loading) {
@@ -89,9 +137,21 @@ export function PlannerHistory() {
               onDelete={() => deletePlan(plan.id)}
               isExpanded={expandedPlan === plan.id}
               onToggleDetails={() => togglePlanDetails(plan.id)}
+              onExportIngredients={() => exportIngredients(plan.id)}
+              onExportIcs={() => exportIcsFile(plan.id)}
+              loadingIngredients={loadingIngredients}
             />
           ))}
         </div>
+      )}
+
+      {/* Ingredients Export Modal */}
+      {showIngredientsModal && (
+        <IngredientsModal
+          ingredients={ingredientsText}
+          onClose={() => setShowIngredientsModal(false)}
+          onCopy={() => copyToClipboard(ingredientsText)}
+        />
       )}
     </div>
   );
@@ -101,12 +161,18 @@ function PlanCard({
   plan, 
   onDelete, 
   isExpanded, 
-  onToggleDetails 
+  onToggleDetails,
+  onExportIngredients,
+  onExportIcs,
+  loadingIngredients
 }: { 
   plan: MealPlan; 
   onDelete: () => void;
   isExpanded: boolean;
   onToggleDetails: () => void;
+  onExportIngredients: () => void;
+  onExportIcs: () => void;
+  loadingIngredients: boolean;
 }) {
   const navigate = useNavigate();
   const [recipes, setRecipes] = useState<Record<string, Recipe>>({});
@@ -268,6 +334,32 @@ function PlanCard({
                 )}
               </div>
             )}
+            
+            {/* Export Options */}
+            <div className="pt-4 border-t space-y-3">
+              <h4 className="font-medium">Export Options:</h4>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onExportIngredients}
+                  disabled={loadingIngredients}
+                  className="flex items-center gap-2"
+                >
+                  <ShoppingCart className="h-4 w-4" />
+                  {loadingIngredients ? 'Loading...' : 'Export Shopping List'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onExportIcs}
+                  className="flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Calendar (.ics)
+                </Button>
+              </div>
+            </div>
           </div>
         </CardContent>
       )}
@@ -312,5 +404,55 @@ function EmptyHistoryView() {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function IngredientsModal({
+  ingredients,
+  onClose,
+  onCopy
+}: {
+  ingredients: string;
+  onClose: () => void;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <Card className="w-full max-w-2xl max-h-[80vh] flex flex-col">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5" />
+              Consolidated Shopping List
+            </CardTitle>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <CardDescription>
+            Copy this list to your todo app or shopping app
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-hidden flex flex-col gap-4">
+          <div className="flex-1 overflow-y-auto">
+            <Textarea
+              value={ingredients}
+              readOnly
+              className="min-h-[300px] font-mono text-sm resize-none"
+              placeholder="Loading ingredients..."
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onClose}>
+              Close
+            </Button>
+            <Button onClick={onCopy} className="flex items-center gap-2">
+              <Copy className="h-4 w-4" />
+              Copy to Clipboard
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

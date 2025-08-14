@@ -220,3 +220,41 @@ async def export_meal_plan_txt(meal_plan_id: str):
     except Exception as e:
         logger.error(f"Error exporting meal plan TXT {meal_plan_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.get("/{meal_plan_id}/export/ingredients")
+async def export_consolidated_ingredients(meal_plan_id: str):
+    """Export consolidated ingredient list for copying to todo apps"""
+    try:
+        meal_plan = await meal_plan_repo.get_meal_plan(meal_plan_id)
+        if not meal_plan:
+            raise HTTPException(status_code=404, detail="Meal plan not found")
+        
+        ingredients_text = await export_service.export_consolidated_ingredients(meal_plan)
+        
+        return {"ingredients": ingredients_text}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting consolidated ingredients {meal_plan_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.get("/{meal_plan_id}/export.ics")
+async def export_meal_plan_ics(meal_plan_id: str):
+    """Export meal plan as ICS calendar file"""
+    try:
+        meal_plan = await meal_plan_repo.get_meal_plan(meal_plan_id)
+        if not meal_plan:
+            raise HTTPException(status_code=404, detail="Meal plan not found")
+        
+        ics_content = await export_service.export_meal_plan_ics(meal_plan)
+        
+        return Response(
+            content=ics_content,
+            media_type="text/calendar",
+            headers={"Content-Disposition": f"attachment; filename=meal_plan_{meal_plan.week_start_date}.ics"}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting meal plan ICS {meal_plan_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")

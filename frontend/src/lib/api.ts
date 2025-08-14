@@ -228,6 +228,15 @@ class ApiClient {
     return response.blob();
   }
 
+  async exportConsolidatedIngredients(id: string): Promise<{ingredients: string}> {
+    return this.request<{ingredients: string}>(`/api/mealplans/${id}/export/ingredients`);
+  }
+
+  async exportMealPlanIcs(id: string): Promise<Blob> {
+    const response = await fetch(`${API_BASE_URL}/api/mealplans/${id}/export.ics`);
+    return response.blob();
+  }
+
   // Profile
   async getProfile(): Promise<UserProfile> {
     return this.request<UserProfile>('/api/profile');
