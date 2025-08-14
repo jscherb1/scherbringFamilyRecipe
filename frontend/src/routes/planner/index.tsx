@@ -16,6 +16,11 @@ export function PlannerIndex() {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
+  
+  // Recipe selection modal
+  const [showRecipeSelector, setShowRecipeSelector] = useState(false);
+  const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null);
+  const [availableRecipes, setAvailableRecipes] = useState<Recipe[]>([]);
 
   // Plan settings
   const [weekStartDate, setWeekStartDate] = useState(() => {
@@ -101,6 +106,185 @@ export function PlannerIndex() {
   const regenerateUnlocked = async () => {
     // For now, just regenerate everything since we don't have locking implemented
     await generatePlan();
+  };
+
+  const openRecipeSelector = async (dayIndex: number) => {
+    try {
+      // Fetch all dinner recipes
+      const response = await apiClient.getRecipes({ 
+        mealType: 'dinner',
+        pageSize: 100 
+      });
+      setAvailableRecipes(response.recipes);
+      setSelectedDayIndex(dayIndex);
+      setShowRecipeSelector(true);
+    } catch (error) {
+      console.error('Failed to fetch recipes:', error);
+      alert('Failed to load recipes. Please try again.');
+    }
+  };
+
+  const selectRecipeForDay = (recipe: Recipe) => {
+    if (selectedDayIndex === null) return;
+    
+    const updatedEntries = [...generatedEntries];
+    const dayDate = getDayDate(selectedDayIndex);
+    
+    // Find or create entry for this day
+    let entryIndex = updatedEntries.findIndex(entry => {
+      const entryDate = new Date(entry.date).toLocaleDateString('en-US', { 
+        month: 'numeric', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+      return entryDate === dayDate;
+    });
+    
+    if (entryIndex === -1) {
+      // Create new entry
+      const startDate = new Date(weekStartDate);
+      const entryDate = new Date(startDate);
+      entryDate.setDate(startDate.getDate() + selectedDayIndex);
+      
+      updatedEntries.push({
+        date: entryDate.toISOString().split('T')[0],
+        recipeId: recipe.id,
+        locked: false
+      });
+    } else {
+      // Update existing entry
+      updatedEntries[entryIndex] = {
+        ...updatedEntries[entryIndex],
+        recipeId: recipe.id
+      };
+    }
+    
+    setGeneratedEntries(updatedEntries);
+    setPlanRecipes(prev => ({ ...prev, [recipe.id]: recipe }));
+    setHasUnsavedChanges(true);
+    setShowRecipeSelector(false);
+    setSelectedDayIndex(null);
+  };
+
+  const deleteRecipeForDay = (dayIndex: number) => {
+    const updatedEntries = [...generatedEntries];
+    const dayDate = getDayDate(dayIndex);
+    
+    // Find entry for this day
+    const entryIndex = updatedEntries.findIndex(entry => {
+      const entryDate = new Date(entry.date).toLocaleDateString('en-US', { 
+        month: 'numeric', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+      return entryDate === dayDate;
+    });
+    
+    if (entryIndex !== -1) {
+      // Remove recipe but keep the entry structure
+      updatedEntries[entryIndex] = {
+        ...updatedEntries[entryIndex],
+        recipeId: undefined
+      };
+      setGeneratedEntries(updatedEntries);
+      setHasUnsavedChanges(true);
+    }
+  };
+
+  const toggleLockForDay = (dayIndex: number) => {
+    const updatedEntries = [...generatedEntries];
+    const dayDate = getDayDate(dayIndex);
+    
+    // Find entry for this day
+    const entryIndex = updatedEntries.findIndex(entry => {
+      const entryDate = new Date(entry.date).toLocaleDateString('en-US', { 
+        month: 'numeric', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+      return entryDate === dayDate;
+    });
+    
+    if (entryIndex !== -1) {
+      updatedEntries[entryIndex] = {
+        ...updatedEntries[entryIndex],
+        locked: !updatedEntries[entryIndex].locked
+      };
+      setGeneratedEntries(updatedEntries);
+      setHasUnsavedChanges(true);
+    }
+  };
+
+  const swapRecipeForDay = async (dayIndex: number) => {
+    try {
+      // Get current entry
+      const dayDate = getDayDate(dayIndex);
+      const currentEntry = generatedEntries.find(entry => {
+        const entryDate = new Date(entry.date).toLocaleDateString('en-US', { 
+          month: 'numeric', 
+          day: 'numeric', 
+          year: 'numeric' 
+        });
+        return entryDate === dayDate;
+      });
+      
+      // Fetch all dinner recipes
+      const response = await apiClient.getRecipes({ 
+        mealType: 'dinner',
+        pageSize: 100 
+      });
+      
+      // Filter out the current recipe
+      const eligibleRecipes = response.recipes.filter(recipe => 
+        recipe.id !== currentEntry?.recipeId
+      );
+      
+      if (eligibleRecipes.length === 0) {
+        alert('No other recipes available for swapping.');
+        return;
+      }
+      
+      // Randomly select a new recipe
+      const randomIndex = Math.floor(Math.random() * eligibleRecipes.length);
+      const newRecipe = eligibleRecipes[randomIndex];
+      
+      // Update the entry
+      const updatedEntries = [...generatedEntries];
+      const entryIndex = updatedEntries.findIndex(entry => {
+        const entryDate = new Date(entry.date).toLocaleDateString('en-US', { 
+          month: 'numeric', 
+          day: 'numeric', 
+          year: 'numeric' 
+        });
+        return entryDate === dayDate;
+      });
+      
+      if (entryIndex !== -1) {
+        updatedEntries[entryIndex] = {
+          ...updatedEntries[entryIndex],
+          recipeId: newRecipe.id
+        };
+      } else {
+        // Create new entry
+        const startDate = new Date(weekStartDate);
+        const entryDate = new Date(startDate);
+        entryDate.setDate(startDate.getDate() + dayIndex);
+        
+        updatedEntries.push({
+          date: entryDate.toISOString().split('T')[0],
+          recipeId: newRecipe.id,
+          locked: false
+        });
+      }
+      
+      setGeneratedEntries(updatedEntries);
+      setPlanRecipes(prev => ({ ...prev, [newRecipe.id]: newRecipe }));
+      setHasUnsavedChanges(true);
+      
+    } catch (error) {
+      console.error('Failed to swap recipe:', error);
+      alert('Failed to swap recipe. Please try again.');
+    }
   };
 
   const getDayName = (index: number) => {
@@ -199,10 +383,15 @@ export function PlannerIndex() {
               return (
                 <DayCard
                   key={index}
+                  dayIndex={index}
                   dayName={getDayName(index)}
                   dayDate={getDayDate(index)}
                   recipe={recipe}
                   entry={entry}
+                  onSelectRecipe={() => openRecipeSelector(index)}
+                  onDeleteRecipe={() => deleteRecipeForDay(index)}
+                  onToggleLock={() => toggleLockForDay(index)}
+                  onSwapRecipe={() => swapRecipeForDay(index)}
                 />
               );
             })}
@@ -231,20 +420,42 @@ export function PlannerIndex() {
       ) : (
         <EmptyPlanView onGenerate={generatePlan} generating={generating} />
       )}
+
+      {/* Recipe Selection Modal */}
+      {showRecipeSelector && (
+        <RecipeSelectionModal
+          recipes={availableRecipes}
+          onSelect={selectRecipeForDay}
+          onClose={() => {
+            setShowRecipeSelector(false);
+            setSelectedDayIndex(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
 function DayCard({ 
+  dayIndex,
   dayName, 
   dayDate, 
   recipe, 
-  entry 
+  entry,
+  onSelectRecipe,
+  onDeleteRecipe,
+  onToggleLock,
+  onSwapRecipe
 }: { 
+  dayIndex: number;
   dayName: string;
   dayDate: string;
   recipe: Recipe | null; 
   entry?: MealPlanEntry;
+  onSelectRecipe: () => void;
+  onDeleteRecipe: () => void;
+  onToggleLock: () => void;
+  onSwapRecipe: () => void;
 }) {
   const navigate = useNavigate();
 
@@ -256,11 +467,22 @@ function DayCard({
             <h3 className="font-semibold">{dayName}</h3>
             <p className="text-sm text-muted-foreground">{dayDate}</p>
           </div>
-          {entry?.locked && (
-            <Badge variant="secondary" className="text-xs">
-              🔒
-            </Badge>
-          )}
+          <div className="flex items-center space-x-1">
+            {entry?.locked && (
+              <Badge variant="secondary" className="text-xs">
+                🔒
+              </Badge>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggleLock}
+              className="h-8 w-8 p-0"
+              title={entry?.locked ? "Unlock day" : "Lock day"}
+            >
+              {entry?.locked ? "🔓" : "🔒"}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       
@@ -288,7 +510,15 @@ function DayCard({
           </div>
 
           <div className="flex space-x-2">
-            <Button variant="outline" size="sm" className="flex-1">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex-1"
+              onClick={onSwapRecipe}
+              disabled={entry?.locked}
+              title={entry?.locked ? "Day is locked" : "Swap with random recipe"}
+            >
+              <Shuffle className="h-3 w-3 mr-1" />
               Swap
             </Button>
             <Button 
@@ -300,6 +530,28 @@ function DayCard({
               View
             </Button>
           </div>
+          <div className="flex space-x-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex-1"
+              onClick={onSelectRecipe}
+              disabled={entry?.locked}
+              title={entry?.locked ? "Day is locked" : "Select different recipe"}
+            >
+              Select
+            </Button>
+            <Button 
+              variant="destructive" 
+              size="sm" 
+              className="flex-1"
+              onClick={onDeleteRecipe}
+              disabled={entry?.locked}
+              title={entry?.locked ? "Day is locked" : "Remove recipe"}
+            >
+              Delete
+            </Button>
+          </div>
         </CardContent>
       ) : (
         <CardContent className="space-y-3">
@@ -307,7 +559,14 @@ function DayCard({
             <ChefHat className="h-8 w-8 text-muted-foreground" />
           </div>
           <p className="text-center text-sm text-muted-foreground">No recipe assigned</p>
-          <Button variant="outline" size="sm" className="w-full">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="w-full"
+            onClick={onSelectRecipe}
+            disabled={entry?.locked}
+            title={entry?.locked ? "Day is locked" : "Select recipe"}
+          >
             Add Recipe
           </Button>
         </CardContent>
@@ -333,5 +592,78 @@ function EmptyPlanView({ onGenerate, generating }: { onGenerate: () => void; gen
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function RecipeSelectionModal({
+  recipes,
+  onSelect,
+  onClose
+}: {
+  recipes: Recipe[];
+  onSelect: (recipe: Recipe) => void;
+  onClose: () => void;
+}) {
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  const filteredRecipes = recipes.filter(recipe =>
+    recipe.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    recipe.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <Card className="w-full max-w-2xl max-h-[80vh] m-4">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Select a Recipe</CardTitle>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              ✕
+            </Button>
+          </div>
+          <Input
+            placeholder="Search recipes..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </CardHeader>
+        <CardContent className="overflow-y-auto">
+          <div className="space-y-2">
+            {filteredRecipes.map((recipe) => (
+              <div
+                key={recipe.id}
+                className="flex items-center justify-between p-3 border rounded hover:bg-muted cursor-pointer"
+                onClick={() => onSelect(recipe)}
+              >
+                <div className="flex-1">
+                  <h4 className="font-medium">{recipe.title}</h4>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {recipe.tags.slice(0, 3).map((tag) => (
+                      <Badge key={tag} variant="outline" className="text-xs">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                  {recipe.cookTimeMin && (
+                    <div className="flex items-center space-x-1 text-sm text-muted-foreground mt-1">
+                      <Clock className="h-3 w-3" />
+                      <span>{recipe.cookTimeMin}m cook time</span>
+                    </div>
+                  )}
+                </div>
+                <Button variant="outline" size="sm">
+                  Select
+                </Button>
+              </div>
+            ))}
+            {filteredRecipes.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                No recipes found matching your search.
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
