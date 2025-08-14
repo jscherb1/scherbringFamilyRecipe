@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import os
@@ -12,6 +12,17 @@ from app.api import recipes, tags, mealplans, profile
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Reduce Azure SDK logging verbosity
+azure_loggers = [
+    'azure',
+    'azure.core.pipeline.policies.http_logging_policy',
+    'azure.storage.blob',
+    'azure.cosmos'
+]
+for azure_logger_name in azure_loggers:
+    azure_logger = logging.getLogger(azure_logger_name)
+    azure_logger.setLevel(logging.WARNING)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -40,14 +51,6 @@ app = FastAPI(
 
 # Configure response model to use aliases
 app.openapi_version = "3.0.2"
-
-# Debug middleware to log requests
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    logger.info(f"Request: {request.method} {request.url}")
-    response = await call_next(request)
-    logger.info(f"Response status: {response.status_code}")
-    return response
 
 # Dynamic CORS origins
 def get_cors_origins():

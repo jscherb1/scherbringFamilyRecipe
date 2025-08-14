@@ -59,11 +59,15 @@ async def create_meal_plan(
             # Group by date and update
             for recipe_id, cooked_date in recipe_updates.items():
                 from datetime import datetime
-                await recipe_repo.update_last_cooked([recipe_id], datetime.combine(cooked_date, datetime.min.time()))
+                # Convert date to datetime at midnight UTC
+                cooked_datetime = datetime.combine(cooked_date, datetime.min.time())
+                await recipe_repo.update_last_cooked([recipe_id], cooked_datetime)
         
         return meal_plan
     except Exception as e:
         logger.error(f"Error creating meal plan: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/", response_model=List[MealPlan])

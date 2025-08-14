@@ -161,9 +161,6 @@ async def get_recipe(
         if not recipe:
             raise HTTPException(status_code=404, detail="Recipe not found")
         
-        # Debug logging
-        logger.info(f"Retrieved recipe {recipe_id}: image_url={recipe.image_url}, thumbnail_url={recipe.thumbnail_url}")
-        
         return recipe
     except HTTPException:
         raise

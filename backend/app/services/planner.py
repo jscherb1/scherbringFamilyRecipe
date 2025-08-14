@@ -56,6 +56,7 @@ class MealPlannerService:
         # Generate entries
         entries = []
         used_recipe_ids = set()
+        available_pool = eligible_recipes.copy()  # Pool of recipes to select from
         
         for dinner_date in dinner_dates:
             if dinner_date in locked_entries:
@@ -63,13 +64,16 @@ class MealPlannerService:
                 entries.append(locked_entries[dinner_date])
                 if locked_entries[dinner_date].recipe_id:
                     used_recipe_ids.add(locked_entries[dinner_date].recipe_id)
+                    # Remove from pool if used
+                    available_pool = [r for r in available_pool if r.id != locked_entries[dinner_date].recipe_id]
             else:
                 # Generate new entry
                 recipe = self._select_recipe(
                     eligible_recipes,
                     used_recipe_ids,
                     recently_used,
-                    constraints
+                    constraints,
+                    available_pool
                 )
                 
                 entry = MealPlanEntry(
@@ -82,6 +86,14 @@ class MealPlannerService:
                 
                 if recipe:
                     used_recipe_ids.add(recipe.id)
+                    # Remove from pool once used
+                    available_pool = [r for r in available_pool if r.id != recipe.id]
+                    
+                    # If pool is empty and we still have dates to fill, reset the pool
+                    if not available_pool and len(entries) < len(dinner_dates):
+                        available_pool = eligible_recipes.copy()
+                        # Remove already used recipes from this plan
+                        available_pool = [r for r in available_pool if r.id not in used_recipe_ids]
         
         # Get recipe details for the response
         recipe_map = {recipe.id: recipe for recipe in eligible_recipes}
@@ -183,15 +195,24 @@ class MealPlannerService:
         eligible_recipes: List[Recipe],
         used_recipe_ids: Set[str],
         recently_used: Set[str],
-        constraints: PlannerConstraints
+        constraints: PlannerConstraints,
+        available_pool: Optional[List[Recipe]] = None
     ) -> Optional[Recipe]:
         """Select a recipe based on constraints and balancing"""
         
+        # Use the available pool if provided, otherwise use all eligible recipes
+        pool = available_pool if available_pool is not None else eligible_recipes
+        
         # Filter out already used recipes in this plan
-        available = [r for r in eligible_recipes if r.id not in used_recipe_ids]
+        available = [r for r in pool if r.id not in used_recipe_ids]
         
         if not available:
-            return None
+            # If no recipes available from the pool, start over with all eligible recipes
+            if available_pool is not None:
+                available = [r for r in eligible_recipes if r.id not in used_recipe_ids]
+            
+            if not available:
+                return None
         
         # Prefer recipes not used recently
         preferred = [r for r in available if r.id not in recently_used]

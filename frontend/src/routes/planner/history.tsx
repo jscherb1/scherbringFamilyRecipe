@@ -5,13 +5,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Badge } from '../../components/ui/Badge';
 import { Calendar, ArrowLeft, Trash2, Eye } from 'lucide-react';
 import { apiClient } from '../../lib/api';
-import { MealPlan } from '../../lib/types';
+import { MealPlan, Recipe } from '../../lib/types';
 import { formatDate } from '../../lib/utils';
 
 export function PlannerHistory() {
   const navigate = useNavigate();
   const [plans, setPlans] = useState<MealPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedPlan, setExpandedPlan] = useState<string | null>(null);
 
   useEffect(() => {
     loadPlans();
@@ -44,6 +45,10 @@ export function PlannerHistory() {
       console.error('Failed to delete meal plan:', error);
       alert('Failed to delete meal plan');
     }
+  };
+
+  const togglePlanDetails = (planId: string) => {
+    setExpandedPlan(expandedPlan === planId ? null : planId);
   };
 
   if (loading) {
@@ -82,6 +87,8 @@ export function PlannerHistory() {
               key={plan.id} 
               plan={plan} 
               onDelete={() => deletePlan(plan.id)}
+              isExpanded={expandedPlan === plan.id}
+              onToggleDetails={() => togglePlanDetails(plan.id)}
             />
           ))}
         </div>
@@ -90,8 +97,57 @@ export function PlannerHistory() {
   );
 }
 
-function PlanCard({ plan, onDelete }: { plan: MealPlan; onDelete: () => void }) {
+function PlanCard({ 
+  plan, 
+  onDelete, 
+  isExpanded, 
+  onToggleDetails 
+}: { 
+  plan: MealPlan; 
+  onDelete: () => void;
+  isExpanded: boolean;
+  onToggleDetails: () => void;
+}) {
+  const navigate = useNavigate();
+  const [recipes, setRecipes] = useState<Record<string, Recipe>>({});
+  const [loadingRecipes, setLoadingRecipes] = useState(false);
+  
   const mealCount = plan.entries.filter(entry => entry.recipeId).length;
+
+  useEffect(() => {
+    if (isExpanded && mealCount > 0) {
+      loadRecipes();
+    }
+  }, [isExpanded, mealCount]);
+
+  const loadRecipes = async () => {
+    try {
+      setLoadingRecipes(true);
+      const recipeIds = plan.entries
+        .filter(entry => entry.recipeId)
+        .map(entry => entry.recipeId!);
+
+      const recipeMap: Record<string, Recipe> = {};
+      for (const recipeId of recipeIds) {
+        try {
+          const recipe = await apiClient.getRecipe(recipeId);
+          recipeMap[recipeId] = recipe;
+        } catch (error) {
+          console.error(`Failed to load recipe ${recipeId}:`, error);
+        }
+      }
+      setRecipes(recipeMap);
+    } catch (error) {
+      console.error('Failed to load recipes:', error);
+    } finally {
+      setLoadingRecipes(false);
+    }
+  };
+
+  const getDayName = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { weekday: 'long' });
+  };
   
   return (
     <Card>
@@ -110,9 +166,9 @@ function PlanCard({ plan, onDelete }: { plan: MealPlan; onDelete: () => void }) 
             <Badge variant="secondary">
               {plan.dinnersPerWeek} dinners/week
             </Badge>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={onToggleDetails}>
               <Eye className="h-4 w-4 mr-2" />
-              View Details
+              {isExpanded ? 'Hide Details' : 'View Details'}
             </Button>
             <Button variant="outline" size="sm" onClick={onDelete}>
               <Trash2 className="h-4 w-4" />
@@ -121,7 +177,102 @@ function PlanCard({ plan, onDelete }: { plan: MealPlan; onDelete: () => void }) 
         </div>
       </CardHeader>
       
-      {mealCount > 0 && (
+      {isExpanded && (
+        <CardContent>
+          <div className="space-y-4">
+            <div>
+              <h4 className="font-medium mb-3">Meal Schedule:</h4>
+              {loadingRecipes ? (
+                <div className="flex items-center justify-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  <span className="ml-2 text-sm text-muted-foreground">Loading recipes...</span>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {plan.entries
+                    .filter(entry => entry.recipeId)
+                    .map((entry, index) => {
+                      const recipe = recipes[entry.recipeId!];
+                      return (
+                        <div key={entry.date} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="space-y-1">
+                            <div className="font-medium">
+                              {getDayName(entry.date)} ({formatDate(entry.date)})
+                            </div>
+                            {recipe ? (
+                              <div className="space-y-1">
+                                <div className="text-lg font-medium text-primary">
+                                  {recipe.title}
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {recipe.tags.slice(0, 3).map(tag => (
+                                    <Badge key={tag} variant="outline" className="text-xs">
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                  {recipe.cookTimeMin && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      {recipe.cookTimeMin}m cook
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-muted-foreground">Recipe not found</div>
+                            )}
+                          </div>
+                          {recipe && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => navigate(`/recipes/${recipe.id}`)}
+                            >
+                              View Recipe
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+            
+            {(plan.constraints.excludeIngredients.length > 0 || 
+              plan.constraints.includeTags.length > 0 || 
+              plan.constraints.excludeTags.length > 0) && (
+              <div className="pt-4 border-t space-y-2">
+                <h4 className="font-medium">Constraints Used:</h4>
+                {plan.constraints.excludeIngredients.length > 0 && (
+                  <div className="text-sm">
+                    <span className="font-medium">Excluded ingredients: </span>
+                    <span className="text-muted-foreground">
+                      {plan.constraints.excludeIngredients.join(', ')}
+                    </span>
+                  </div>
+                )}
+                {plan.constraints.includeTags.length > 0 && (
+                  <div className="text-sm">
+                    <span className="font-medium">Required tags: </span>
+                    <span className="text-muted-foreground">
+                      {plan.constraints.includeTags.join(', ')}
+                    </span>
+                  </div>
+                )}
+                {plan.constraints.excludeTags.length > 0 && (
+                  <div className="text-sm">
+                    <span className="font-medium">Excluded tags: </span>
+                    <span className="text-muted-foreground">
+                      {plan.constraints.excludeTags.join(', ')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      )}
+      
+      {!isExpanded && mealCount > 0 && (
         <CardContent>
           <div className="space-y-3">
             <h4 className="font-medium">Meal Schedule:</h4>
@@ -131,32 +282,12 @@ function PlanCard({ plan, onDelete }: { plan: MealPlan; onDelete: () => void }) 
                 .map((entry, index) => (
                   <div key={entry.date} className="flex items-center justify-between py-1">
                     <span className="text-muted-foreground">
-                      Day {index + 1} ({formatDate(entry.date)})
+                      {getDayName(entry.date)} ({formatDate(entry.date)})
                     </span>
                     <span className="font-medium">Recipe planned</span>
                   </div>
                 ))}
             </div>
-            
-            {plan.constraints.excludeIngredients.length > 0 && (
-              <div className="mt-3 pt-3 border-t">
-                <div className="text-sm">
-                  <span className="font-medium">Excluded ingredients: </span>
-                  <span className="text-muted-foreground">
-                    {plan.constraints.excludeIngredients.join(', ')}
-                  </span>
-                </div>
-              </div>
-            )}
-            
-            {plan.constraints.includeTags.length > 0 && (
-              <div className="text-sm">
-                <span className="font-medium">Required tags: </span>
-                <span className="text-muted-foreground">
-                  {plan.constraints.includeTags.join(', ')}
-                </span>
-              </div>
-            )}
           </div>
         </CardContent>
       )}

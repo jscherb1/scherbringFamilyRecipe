@@ -182,7 +182,6 @@ class RecipeRepository:
             FROM c 
             JOIN t IN c.tags 
             WHERE c.userId = @user_id AND c.type = 'Recipe'
-            ORDER BY t
         """
         parameters = [{"name": "@user_id", "value": self.user_id}]
         
@@ -192,7 +191,9 @@ class RecipeRepository:
             enable_cross_partition_query=True
         ))
         
-        return [item['t'] for item in items]
+        # Sort tags in Python instead of using ORDER BY in the query
+        tags = [item['t'] for item in items]
+        return sorted(tags)
     
     async def update_last_cooked(self, recipe_ids: List[str], cooked_date: datetime) -> None:
         """Update last_cooked_at for multiple recipes"""
@@ -202,20 +203,24 @@ class RecipeRepository:
             try:
                 # Read current recipe
                 item = container.read_item(item=recipe_id, partition_key=self.user_id)
-                recipe = Recipe(**item)
+                recipe = Recipe.from_cosmos_data(item)
                 
                 # Update last cooked date
                 recipe.last_cooked_at = cooked_date
                 recipe.updated_at = datetime.utcnow()
                 
-                # Save back
+                # Save back - use model_dump() with proper serialization
+                recipe_data = recipe.model_dump()
                 container.replace_item(
                     item=recipe_id,
-                    body=recipe.model_dump()
+                    body=recipe_data
                 )
                 
             except CosmosResourceNotFoundError:
                 logger.warning(f"Recipe {recipe_id} not found for last_cooked update")
+                continue
+            except Exception as e:
+                logger.error(f"Error updating recipe {recipe_id}: {e}")
                 continue
         
         logger.info(f"Updated last_cooked_at for {len(recipe_ids)} recipes")
