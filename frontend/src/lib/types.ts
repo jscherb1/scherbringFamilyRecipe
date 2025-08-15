@@ -141,6 +141,7 @@ export interface UserProfile {
   startWeekOn: "monday" | "sunday";
   timezone: string;
   tagCatalog: string[];
+  stapleGroceries: string[];
   exportPrefs: Record<string, any>;
   createdAt: string;
   updatedAt: string;
@@ -153,5 +154,6 @@ export interface UserProfileUpdate {
   startWeekOn?: "monday" | "sunday";
   timezone?: string;
   tagCatalog?: string[];
+  stapleGroceries?: string[];
   exportPrefs?: Record<string, any>;
 }

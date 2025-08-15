@@ -246,6 +246,10 @@ class ApiClient {
     return this.request<{ingredients: string}>(`/api/mealplans/${id}/export/ingredients`);
   }
 
+  async exportConsolidatedIngredientsWithStaples(id: string): Promise<{ingredients: string}> {
+    return this.request<{ingredients: string}>(`/api/mealplans/${id}/export/ingredients/with-staples`);
+  }
+
   async exportMealPlanIcs(id: string): Promise<Blob> {
     const response = await fetch(`${API_BASE_URL}/api/mealplans/${id}/export.ics`);
     return response.blob();
