@@ -218,7 +218,7 @@ function PlanCard({
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col space-y-2 md:flex-row md:items-center md:justify-between md:space-y-0">
           <div className="space-y-1">
             <CardTitle className="flex items-center space-x-2">
               <Calendar className="h-5 w-5" />
@@ -228,17 +228,19 @@ function PlanCard({
               Created on {formatDate(plan.createdAt)} • {mealCount} meals planned
             </CardDescription>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-col space-y-2 md:flex-row md:items-center md:space-y-0 md:space-x-2">
             <Badge variant="secondary">
               {plan.dinnersPerWeek} dinners/week
             </Badge>
-            <Button variant="outline" size="sm" onClick={onToggleDetails}>
-              <Eye className="h-4 w-4 mr-2" />
-              {isExpanded ? 'Hide Details' : 'View Details'}
-            </Button>
-            <Button variant="outline" size="sm" onClick={onDelete}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <div className="flex space-x-2">
+              <Button variant="outline" size="sm" onClick={onToggleDetails} className="flex-1 md:flex-none">
+                <Eye className="h-4 w-4 mr-2" />
+                {isExpanded ? 'Hide Details' : 'View Details'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={onDelete} className="flex-1 md:flex-none">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </CardHeader>
@@ -338,13 +340,13 @@ function PlanCard({
             {/* Export Options */}
             <div className="pt-4 border-t space-y-3">
               <h4 className="font-medium">Export Options:</h4>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col space-y-2 sm:flex-row sm:flex-wrap sm:gap-2 sm:space-y-0">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={onExportIngredients}
                   disabled={loadingIngredients}
-                  className="flex items-center gap-2"
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto"
                 >
                   <ShoppingCart className="h-4 w-4" />
                   {loadingIngredients ? 'Loading...' : 'Export Shopping List'}
@@ -353,7 +355,7 @@ function PlanCard({
                   variant="outline"
                   size="sm"
                   onClick={onExportIcs}
-                  className="flex items-center gap-2"
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto"
                 >
                   <Download className="h-4 w-4" />
                   Download Calendar (.ics)

@@ -104,8 +104,86 @@ export function PlannerIndex() {
   };
 
   const regenerateUnlocked = async () => {
-    // For now, just regenerate everything since we don't have locking implemented
-    await generatePlan();
+    if (!generatedEntries || generatedEntries.length === 0) {
+      // If no meal plan exists, just generate a new one
+      await generatePlan();
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      // Get all available dinner recipes
+      const recipesResponse = await apiClient.getRecipes({ 
+        mealType: 'dinner',
+        pageSize: 100 
+      });
+
+      // Get currently locked recipe IDs
+      const lockedRecipeIds = new Set(
+        generatedEntries
+          .filter(entry => entry?.locked && entry?.recipeId)
+          .map(entry => entry.recipeId)
+      );
+
+      // Filter out locked recipes from available recipes
+      const availableForSelection = recipesResponse.recipes.filter(
+        recipe => !lockedRecipeIds.has(recipe.id)
+      );
+
+      // Ensure we always have recipes to choose from
+      const recipesToChooseFrom = availableForSelection.length > 0 
+        ? availableForSelection 
+        : recipesResponse.recipes;
+
+      // If we still don't have any recipes, that's a problem
+      if (recipesToChooseFrom.length === 0) {
+        throw new Error('No recipes available in the database');
+      }
+
+      // Create updated entries
+      const updatedEntries = [...generatedEntries];
+      const usedRecipeIds = new Set(lockedRecipeIds); // Start with locked recipes
+
+      for (let i = 0; i < updatedEntries.length; i++) {
+        // If this day is not locked, replace it with a new entry
+        if (!updatedEntries[i]?.locked) {
+          // Find a recipe that hasn't been used yet in this regeneration
+          let selectedRecipe = null;
+          const availableRecipes = recipesToChooseFrom.filter(recipe => !usedRecipeIds.has(recipe.id));
+          
+          if (availableRecipes.length > 0) {
+            // Select random recipe from unused recipes
+            selectedRecipe = availableRecipes[Math.floor(Math.random() * availableRecipes.length)];
+          } else {
+            // If all recipes are used, select any recipe (allow duplicates)
+            selectedRecipe = recipesToChooseFrom[Math.floor(Math.random() * recipesToChooseFrom.length)];
+          }
+          
+          // Always assign a recipe - this should never be null/undefined now
+          updatedEntries[i] = {
+            date: new Date(new Date(weekStartDate).getTime() + i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            recipeId: selectedRecipe.id,
+            locked: false
+          };
+          usedRecipeIds.add(selectedRecipe.id);
+        }
+      }
+
+      setGeneratedEntries(updatedEntries);
+      setAvailableRecipes(recipesResponse.recipes);
+      
+      // Update planRecipes to include all fetched recipes so DayCard can find them
+      const newPlanRecipes: Record<string, Recipe> = {};
+      recipesResponse.recipes.forEach(recipe => {
+        newPlanRecipes[recipe.id] = recipe;
+      });
+      setPlanRecipes(newPlanRecipes);
+    } catch (error) {
+      console.error('Failed to regenerate unlocked entries:', error);
+      alert('Failed to regenerate meal plan. Please try again.');
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const openRecipeSelector = async (dayIndex: number) => {
@@ -382,7 +460,7 @@ export function PlannerIndex() {
               
               return (
                 <DayCard
-                  key={index}
+                  key={`${index}-${entry?.recipeId || 'empty'}-${entry?.locked || false}`}
                   dayIndex={index}
                   dayName={getDayName(index)}
                   dayDate={getDayDate(index)}

@@ -128,7 +128,7 @@ class ExportService:
             if recipe and recipe.ingredients:
                 lines.append(f"{recipe.title}:")
                 for ingredient in recipe.ingredients:
-                    lines.append(f"  • {ingredient}")
+                    lines.append(f"  - {ingredient}")
                 lines.append("")
         
         return "\n".join(lines)
@@ -168,9 +168,9 @@ class ExportService:
             original_ingredient = ingredient_base_names[base_name]
             
             if count > 1:
-                lines.append(f"• {original_ingredient} (needed for {count} recipes)")
+                lines.append(f"{original_ingredient} (needed for {count} recipes)")
             else:
-                lines.append(f"• {original_ingredient}")
+                lines.append(f"{original_ingredient}")
         
         return "\n".join(lines)
     
@@ -210,7 +210,7 @@ class ExportService:
                 if recipe.ingredients:
                     description_parts.append("INGREDIENTS:")
                     for ingredient in recipe.ingredients:
-                        description_parts.append(f"• {ingredient}")
+                        description_parts.append(f"- {ingredient}")
                     description_parts.append("")
                 
                 if recipe.steps:
