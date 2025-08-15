@@ -9,12 +9,14 @@ from collections import defaultdict
 from app.models.meal_plan import MealPlan
 from app.models.recipe import Recipe
 from app.repositories.recipes import recipe_repository
+from app.repositories.profile import ProfileRepository
 
 logger = logging.getLogger(__name__)
 
 class ExportService:
     def __init__(self):
         self.recipe_repo = recipe_repository
+        self.profile_repo = ProfileRepository()
     
     async def export_meal_plan_csv(self, meal_plan: MealPlan) -> str:
         """Export meal plan as CSV with consolidated ingredient lists"""
@@ -174,6 +176,73 @@ class ExportService:
         
         return "\n".join(lines)
     
+    async def export_consolidated_ingredients_with_staples(self, meal_plan: MealPlan) -> str:
+        """Export consolidated ingredient list with family staple items included"""
+        
+        # Get recipes for the meal plan
+        recipe_map = await self._get_recipe_map(meal_plan)
+        
+        # Get user profile for staple groceries
+        profile = await self.profile_repo.get_profile()
+        staple_groceries = profile.staple_groceries if profile else []
+        
+        # Collect and consolidate ingredients
+        ingredient_counts = defaultdict(int)
+        ingredient_base_names = {}  # Track the base name for similar ingredients
+        
+        # Add meal plan ingredients
+        for entry in meal_plan.entries:
+            recipe = recipe_map.get(entry.recipe_id) if entry.recipe_id else None
+            
+            if recipe and recipe.ingredients:
+                for ingredient in recipe.ingredients:
+                    # Normalize ingredient for consolidation
+                    normalized = self._normalize_ingredient(ingredient)
+                    base_name = self._extract_base_ingredient(normalized)
+                    
+                    if base_name not in ingredient_base_names:
+                        ingredient_base_names[base_name] = ingredient
+                    
+                    ingredient_counts[base_name] += 1
+        
+        # Add staple groceries (avoiding duplicates)
+        staple_items = []
+        for staple in staple_groceries:
+            normalized = self._normalize_ingredient(staple)
+            base_name = self._extract_base_ingredient(normalized)
+            
+            # Only add if not already in meal plan ingredients
+            if base_name not in ingredient_base_names:
+                staple_items.append(staple)
+        
+        # Format for todo app
+        lines = []
+        lines.append(f"Shopping List - Week of {meal_plan.week_start_date.strftime('%B %d, %Y')}")
+        lines.append("")
+        
+        # Add meal plan ingredients first
+        meal_plan_ingredients = []
+        for base_name in sorted(ingredient_counts.keys()):
+            count = ingredient_counts[base_name]
+            original_ingredient = ingredient_base_names[base_name]
+            
+            if count > 1:
+                meal_plan_ingredients.append(f"{original_ingredient} (needed for {count} recipes)")
+            else:
+                meal_plan_ingredients.append(f"{original_ingredient}")
+        
+        if meal_plan_ingredients:
+            lines.append("# Meal Plan Ingredients")
+            lines.extend(meal_plan_ingredients)
+            lines.append("")
+        
+        # Add staple items
+        if staple_items:
+            lines.append("# Family Staple Items")
+            lines.extend(sorted(staple_items))
+        
+        return "\n".join(lines)
+
     async def export_meal_plan_ics(self, meal_plan: MealPlan) -> str:
         """Export meal plan as ICS calendar file for Google Calendar"""
         

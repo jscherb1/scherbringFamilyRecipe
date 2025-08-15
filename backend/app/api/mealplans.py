@@ -238,6 +238,23 @@ async def export_consolidated_ingredients(meal_plan_id: str):
         logger.error(f"Error exporting consolidated ingredients {meal_plan_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@router.get("/{meal_plan_id}/export/ingredients/with-staples")
+async def export_consolidated_ingredients_with_staples(meal_plan_id: str):
+    """Export consolidated ingredient list with family staple items included"""
+    try:
+        meal_plan = await meal_plan_repo.get_meal_plan(meal_plan_id)
+        if not meal_plan:
+            raise HTTPException(status_code=404, detail="Meal plan not found")
+        
+        ingredients_text = await export_service.export_consolidated_ingredients_with_staples(meal_plan)
+        
+        return {"ingredients": ingredients_text}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting consolidated ingredients with staples {meal_plan_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 @router.get("/{meal_plan_id}/export.ics")
 async def export_meal_plan_ics(meal_plan_id: str):
     """Export meal plan as ICS calendar file"""

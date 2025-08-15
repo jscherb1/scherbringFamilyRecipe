@@ -21,7 +21,7 @@ class ProfileRepository:
         try:
             container = self._get_container()
             item = container.read_item(item=self.profile_id, partition_key=self.user_id)
-            return UserProfile(**item)
+            return UserProfile.from_cosmos_data(item)
         except CosmosResourceNotFoundError:
             # Create default profile
             return await self.create_default_profile()
@@ -56,7 +56,7 @@ class ProfileRepository:
         )
         
         logger.info("Updated user profile")
-        return UserProfile(**updated_item)
+        return UserProfile.from_cosmos_data(updated_item)
     
     async def add_tag_to_catalog(self, tag: str) -> UserProfile:
         """Add a new tag to the catalog"""
@@ -74,7 +74,7 @@ class ProfileRepository:
             )
             
             logger.info(f"Added tag '{tag}' to catalog")
-            return UserProfile(**updated_item)
+            return UserProfile.from_cosmos_data(updated_item)
         
         return profile
     
@@ -93,7 +93,7 @@ class ProfileRepository:
             )
             
             logger.info(f"Removed tag '{tag}' from catalog")
-            return UserProfile(**updated_item)
+            return UserProfile.from_cosmos_data(updated_item)
         
         return profile
 

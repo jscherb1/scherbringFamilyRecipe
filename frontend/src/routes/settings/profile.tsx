@@ -17,6 +17,7 @@ export function ProfileSettings() {
   const [dislikes, setDislikes] = useState<string[]>([]);
   const [newLike, setNewLike] = useState('');
   const [newDislike, setNewDislike] = useState('');
+  const [stapleGroceries, setStapleGroceries] = useState('');
   const [defaultDinnersPerWeek, setDefaultDinnersPerWeek] = useState(5);
   const [startWeekOn, setStartWeekOn] = useState<'monday' | 'sunday'>('monday');
   const [timezone, setTimezone] = useState('');
@@ -33,6 +34,7 @@ export function ProfileSettings() {
       // Set form state
       setLikes(userProfile.likes);
       setDislikes(userProfile.dislikes);
+      setStapleGroceries(userProfile.stapleGroceries?.join('\n') || '');
       setDefaultDinnersPerWeek(userProfile.defaultDinnersPerWeek);
       setStartWeekOn(userProfile.startWeekOn);
       setTimezone(userProfile.timezone);
@@ -50,6 +52,7 @@ export function ProfileSettings() {
     const updateData: UserProfileUpdate = {
       likes,
       dislikes,
+      stapleGroceries: stapleGroceries.split('\n').map(item => item.trim()).filter(item => item.length > 0),
       defaultDinnersPerWeek,
       startWeekOn,
       timezone: timezone.trim() || 'UTC',
@@ -248,6 +251,31 @@ export function ProfileSettings() {
                   </div>
                 )}
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Staple Groceries */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Family Staple Groceries</CardTitle>
+            <CardDescription>
+              Items you regularly buy that can be added to your shopping lists
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div>
+              <label className="text-sm font-medium">Staple Items</label>
+              <p className="text-xs text-muted-foreground mt-1 mb-2">
+                Enter each item on a new line. These will be available to add to your meal plan shopping lists.
+              </p>
+              <textarea
+                value={stapleGroceries}
+                onChange={(e) => setStapleGroceries(e.target.value)}
+                placeholder={`Milk\nBread\nEggs\nButter\nOnions\nGarlic\nOlive oil\nSalt\nPepper`}
+                className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                rows={6}
+              />
             </div>
           </CardContent>
         </Card>

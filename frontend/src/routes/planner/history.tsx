@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
 import { Textarea } from '../../components/ui/Textarea';
-import { Calendar, ArrowLeft, Trash2, Eye, ShoppingCart, Download, Copy, X } from 'lucide-react';
+import { Calendar, ArrowLeft, Trash2, Eye, ShoppingCart, Download, Copy, X, Plus } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { MealPlan, Recipe } from '../../lib/types';
 import { formatDate } from '../../lib/utils';
@@ -20,6 +20,7 @@ export function PlannerHistory() {
   const [showIngredientsModal, setShowIngredientsModal] = useState(false);
   const [ingredientsText, setIngredientsText] = useState('');
   const [loadingIngredients, setLoadingIngredients] = useState(false);
+  const [currentPlanId, setCurrentPlanId] = useState<string | null>(null);
 
   useEffect(() => {
     loadPlans();
@@ -63,10 +64,24 @@ export function PlannerHistory() {
       setLoadingIngredients(true);
       const response = await apiClient.exportConsolidatedIngredients(planId);
       setIngredientsText(response.ingredients);
+      setCurrentPlanId(planId);
       setShowIngredientsModal(true);
     } catch (error) {
       console.error('Failed to export ingredients:', error);
       alert('Failed to export ingredients. Please try again.');
+    } finally {
+      setLoadingIngredients(false);
+    }
+  };
+
+  const exportIngredientsWithStaples = async (planId: string) => {
+    try {
+      setLoadingIngredients(true);
+      const response = await apiClient.exportConsolidatedIngredientsWithStaples(planId);
+      setIngredientsText(response.ingredients);
+    } catch (error) {
+      console.error('Failed to export ingredients with staples:', error);
+      alert('Failed to export ingredients with staples. Please try again.');
     } finally {
       setLoadingIngredients(false);
     }
@@ -151,6 +166,8 @@ export function PlannerHistory() {
           ingredients={ingredientsText}
           onClose={() => setShowIngredientsModal(false)}
           onCopy={() => copyToClipboard(ingredientsText)}
+          onAddStaples={currentPlanId ? () => exportIngredientsWithStaples(currentPlanId) : undefined}
+          loadingStaples={loadingIngredients}
         />
       )}
     </div>
@@ -412,11 +429,15 @@ function EmptyHistoryView() {
 function IngredientsModal({
   ingredients,
   onClose,
-  onCopy
+  onCopy,
+  onAddStaples,
+  loadingStaples = false
 }: {
   ingredients: string;
   onClose: () => void;
   onCopy: () => void;
+  onAddStaples?: () => void;
+  loadingStaples?: boolean;
 }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -448,6 +469,26 @@ function IngredientsModal({
             <Button variant="outline" onClick={onClose}>
               Close
             </Button>
+            {onAddStaples && (
+              <Button 
+                variant="secondary" 
+                onClick={onAddStaples}
+                disabled={loadingStaples}
+                className="flex items-center gap-2"
+              >
+                {loadingStaples ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4" />
+                    Add Family Staple Items
+                  </>
+                )}
+              </Button>
+            )}
             <Button onClick={onCopy} className="flex items-center gap-2">
               <Copy className="h-4 w-4" />
               Copy to Clipboard
