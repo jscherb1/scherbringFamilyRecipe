@@ -40,6 +40,76 @@ class RecipeBase(BaseModel):
     image_url: Optional[str] = Field(None, alias="imageUrl")  # URL to the full-size image in Azure Storage
     thumbnail_url: Optional[str] = Field(None, alias="thumbnailUrl")  # URL to the thumbnail image
 
+class RecipeCreateBulk(BaseModel):
+    """Recipe creation model with bulk text input for ingredients and steps"""
+    title: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = None
+    ingredients_text: Optional[str] = Field(None, alias="ingredientsText", description="Ingredients as bulk text, separated by line breaks")
+    steps_text: Optional[str] = Field(None, alias="stepsText", description="Steps as bulk text, separated by line breaks")
+    ingredients: Optional[List[str]] = Field(default_factory=list, description="Individual ingredients list (alternative to ingredientsText)")
+    steps: Optional[List[str]] = Field(default_factory=list, description="Individual steps list (alternative to stepsText)")
+    tags: List[str] = Field(default_factory=list)
+    protein_type: Optional[ProteinType] = Field(None, alias="proteinType")
+    meal_type: MealType = Field(MealType.DINNER, alias="mealType")
+    prep_time_min: Optional[int] = Field(None, ge=0, alias="prepTimeMin")
+    cook_time_min: Optional[int] = Field(None, ge=0, alias="cookTimeMin")
+    total_time_min: Optional[int] = Field(None, ge=0, alias="totalTimeMin")
+    servings: Optional[int] = Field(None, ge=1)
+    rating: Optional[int] = Field(None, ge=1, le=5)
+    source_url: Optional[str] = Field(None, alias="sourceUrl")
+    notes: Optional[str] = None
+    last_cooked_at: Optional[datetime] = Field(None, alias="lastCookedAt")
+    image_url: Optional[str] = Field(None, alias="imageUrl")
+    thumbnail_url: Optional[str] = Field(None, alias="thumbnailUrl")
+    
+    model_config = ConfigDict(populate_by_name=True)
+    
+    def to_recipe_create(self) -> 'RecipeCreate':
+        """Convert bulk input to standard RecipeCreate format"""
+        # Process ingredients
+        final_ingredients = []
+        if self.ingredients_text:
+            # Split by line breaks and clean up
+            bulk_ingredients = [
+                line.strip() for line in self.ingredients_text.split('\n') 
+                if line.strip()
+            ]
+            final_ingredients.extend(bulk_ingredients)
+        if self.ingredients:
+            final_ingredients.extend(self.ingredients)
+            
+        # Process steps
+        final_steps = []
+        if self.steps_text:
+            # Split by line breaks and clean up
+            bulk_steps = [
+                line.strip() for line in self.steps_text.split('\n') 
+                if line.strip()
+            ]
+            final_steps.extend(bulk_steps)
+        if self.steps:
+            final_steps.extend(self.steps)
+            
+        return RecipeCreate(
+            title=self.title,
+            description=self.description,
+            ingredients=final_ingredients,
+            steps=final_steps,
+            tags=self.tags,
+            protein_type=self.protein_type,
+            meal_type=self.meal_type,
+            prep_time_min=self.prep_time_min,
+            cook_time_min=self.cook_time_min,
+            total_time_min=self.total_time_min,
+            servings=self.servings,
+            rating=self.rating,
+            source_url=self.source_url,
+            notes=self.notes,
+            last_cooked_at=self.last_cooked_at,
+            image_url=self.image_url,
+            thumbnail_url=self.thumbnail_url
+        )
+
 class RecipeCreate(RecipeBase):
     pass
 
@@ -63,6 +133,74 @@ class RecipeUpdate(BaseModel):
     thumbnail_url: Optional[str] = Field(None, alias="thumbnailUrl")
     
     model_config = ConfigDict(populate_by_name=True)
+
+class RecipeUpdateBulk(BaseModel):
+    """Recipe update model with bulk text input for ingredients and steps"""
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    ingredients_text: Optional[str] = Field(None, alias="ingredientsText", description="Ingredients as bulk text, separated by line breaks")
+    steps_text: Optional[str] = Field(None, alias="stepsText", description="Steps as bulk text, separated by line breaks")
+    ingredients: Optional[List[str]] = None
+    steps: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+    protein_type: Optional[ProteinType] = Field(None, alias="proteinType")
+    meal_type: Optional[MealType] = Field(None, alias="mealType")
+    prep_time_min: Optional[int] = Field(None, ge=0, alias="prepTimeMin")
+    cook_time_min: Optional[int] = Field(None, ge=0, alias="cookTimeMin")
+    total_time_min: Optional[int] = Field(None, ge=0, alias="totalTimeMin")
+    servings: Optional[int] = Field(None, ge=1)
+    rating: Optional[int] = Field(None, ge=1, le=5)
+    source_url: Optional[str] = Field(None, alias="sourceUrl")
+    notes: Optional[str] = None
+    last_cooked_at: Optional[datetime] = Field(None, alias="lastCookedAt")
+    image_url: Optional[str] = Field(None, alias="imageUrl")
+    thumbnail_url: Optional[str] = Field(None, alias="thumbnailUrl")
+    
+    model_config = ConfigDict(populate_by_name=True)
+    
+    def to_recipe_update(self) -> RecipeUpdate:
+        """Convert bulk input to standard RecipeUpdate format"""
+        # Process ingredients
+        final_ingredients = None
+        if self.ingredients_text is not None:
+            # Split by line breaks and clean up
+            final_ingredients = [
+                line.strip() for line in self.ingredients_text.split('\n') 
+                if line.strip()
+            ]
+        elif self.ingredients is not None:
+            final_ingredients = self.ingredients
+            
+        # Process steps
+        final_steps = None
+        if self.steps_text is not None:
+            # Split by line breaks and clean up
+            final_steps = [
+                line.strip() for line in self.steps_text.split('\n') 
+                if line.strip()
+            ]
+        elif self.steps is not None:
+            final_steps = self.steps
+            
+        return RecipeUpdate(
+            title=self.title,
+            description=self.description,
+            ingredients=final_ingredients,
+            steps=final_steps,
+            tags=self.tags,
+            protein_type=self.protein_type,
+            meal_type=self.meal_type,
+            prep_time_min=self.prep_time_min,
+            cook_time_min=self.cook_time_min,
+            total_time_min=self.total_time_min,
+            servings=self.servings,
+            rating=self.rating,
+            source_url=self.source_url,
+            notes=self.notes,
+            last_cooked_at=self.last_cooked_at,
+            image_url=self.image_url,
+            thumbnail_url=self.thumbnail_url
+        )
 
 class Recipe(RecipeBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

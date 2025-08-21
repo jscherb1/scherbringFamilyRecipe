@@ -60,11 +60,55 @@ export interface RecipeCreate {
   thumbnailUrl?: string;
 }
 
+export interface RecipeCreateBulk {
+  title: string;
+  description?: string;
+  ingredientsText?: string;  // Bulk ingredients as text, separated by line breaks
+  stepsText?: string;        // Bulk steps as text, separated by line breaks
+  ingredients?: string[];    // Individual ingredients list (alternative to ingredientsText)
+  steps?: string[];          // Individual steps list (alternative to stepsText)
+  tags: string[];
+  proteinType?: ProteinType;
+  mealType: MealType;
+  prepTimeMin?: number;
+  cookTimeMin?: number;
+  totalTimeMin?: number;
+  servings?: number;
+  rating?: number;
+  sourceUrl?: string;
+  notes?: string;
+  lastCookedAt?: string;
+  imageUrl?: string;
+  thumbnailUrl?: string;
+}
+
 export interface RecipeUpdate {
   title?: string;
   description?: string;
   ingredients?: string[];
   steps?: string[];
+  tags?: string[];
+  proteinType?: ProteinType;
+  mealType?: MealType;
+  prepTimeMin?: number;
+  cookTimeMin?: number;
+  totalTimeMin?: number;
+  servings?: number;
+  rating?: number;
+  sourceUrl?: string;
+  notes?: string;
+  lastCookedAt?: string;
+  imageUrl?: string;
+  thumbnailUrl?: string;
+}
+
+export interface RecipeUpdateBulk {
+  title?: string;
+  description?: string;
+  ingredientsText?: string;  // Bulk ingredients as text, separated by line breaks
+  stepsText?: string;        // Bulk steps as text, separated by line breaks
+  ingredients?: string[];    // Individual ingredients list (alternative to ingredientsText)
+  steps?: string[];          // Individual steps list (alternative to stepsText)
   tags?: string[];
   proteinType?: ProteinType;
   mealType?: MealType;

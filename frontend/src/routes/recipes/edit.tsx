@@ -6,9 +6,10 @@ import { Textarea } from '../../components/ui/Textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { ImageUpload } from '../../components/ui/ImageUpload';
-import { Plus, X, Save, ArrowLeft } from 'lucide-react';
+import { Plus, X, Save, ArrowLeft, List, FileText } from 'lucide-react';
 import { apiClient } from '../../lib/api';
-import { RecipeCreate, ProteinType, MealType } from '../../lib/types';
+import { RecipeCreate, RecipeCreateBulk, ProteinType, MealType } from '../../lib/types';
+import { parseBulkText, arrayToBulkText } from '../../lib/utils';
 
 export function RecipeEdit() {
   const { id } = useParams();
@@ -33,6 +34,12 @@ export function RecipeEdit() {
   const [rating, setRating] = useState<number | ''>('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [notes, setNotes] = useState('');
+  
+  // Bulk input state
+  const [ingredientsBulkMode, setIngredientsBulkMode] = useState(false);
+  const [stepsBulkMode, setStepsBulkMode] = useState(false);
+  const [ingredientsBulkText, setIngredientsBulkText] = useState('');
+  const [stepsBulkText, setStepsBulkText] = useState('');
   
   // Image state
   const [currentImageUrl, setCurrentImageUrl] = useState<string | undefined>();
@@ -85,66 +92,39 @@ export function RecipeEdit() {
       setSaving(true);
       
       if (isEditing && id) {
-        // Update existing recipe
-        const recipeData: RecipeCreate = {
-          title: title.trim(),
-          description: description.trim() || undefined,
-          ingredients: ingredients.filter(i => i.trim()).map(i => i.trim()),
-          steps: steps.filter(s => s.trim()).map(s => s.trim()),
-          tags,
-          proteinType: proteinType || undefined,
-          mealType,
-          prepTimeMin: prepTimeMin ? Number(prepTimeMin) : undefined,
-          cookTimeMin: cookTimeMin ? Number(cookTimeMin) : undefined,
-          servings: servings ? Number(servings) : undefined,
-          rating: rating ? Number(rating) : undefined,
-          sourceUrl: sourceUrl.trim() || undefined,
-          notes: notes.trim() || undefined,
-        };
-        
-        await apiClient.updateRecipe(id, recipeData);
-        
-        // Handle image update if changed
-        if (imageChanged) {
-          if (selectedImageFile) {
-            await apiClient.uploadRecipeImage(id, selectedImageFile);
-          } else if (currentImageUrl && !selectedImageFile) {
-            // Remove image if it was deleted
-            await apiClient.deleteRecipeImage(id);
+        // Update existing recipe - check if we should use bulk or individual mode
+        if (ingredientsBulkMode || stepsBulkMode) {
+          // Use bulk update API
+          const bulkRecipeData: any = {
+            title: title.trim(),
+            description: description.trim() || undefined,
+            tags,
+            proteinType: proteinType || undefined,
+            mealType,
+            prepTimeMin: prepTimeMin ? Number(prepTimeMin) : undefined,
+            cookTimeMin: cookTimeMin ? Number(cookTimeMin) : undefined,
+            servings: servings ? Number(servings) : undefined,
+            rating: rating ? Number(rating) : undefined,
+            sourceUrl: sourceUrl.trim() || undefined,
+            notes: notes.trim() || undefined,
+          };
+
+          // Add bulk or individual data based on current mode
+          if (ingredientsBulkMode) {
+            bulkRecipeData.ingredientsText = ingredientsBulkText;
+          } else {
+            bulkRecipeData.ingredients = ingredients.filter(i => i.trim()).map(i => i.trim());
           }
-        }
-      } else {
-        // Create new recipe
-        console.log('Creating new recipe, selectedImageFile:', selectedImageFile);
-        
-        if (selectedImageFile) {
-          // Create recipe with image
-          console.log('Creating recipe with image');
-          const formData = new FormData();
-          formData.append('title', title.trim());
-          if (description.trim()) formData.append('description', description.trim());
-          formData.append('ingredients', JSON.stringify(ingredients.filter(i => i.trim()).map(i => i.trim())));
-          formData.append('steps', JSON.stringify(steps.filter(s => s.trim()).map(s => s.trim())));
-          formData.append('tags', JSON.stringify(tags));
-          if (proteinType) formData.append('protein_type', proteinType);
-          formData.append('meal_type', mealType);
-          if (prepTimeMin) formData.append('prep_time_min', String(prepTimeMin));
-          if (cookTimeMin) formData.append('cook_time_min', String(cookTimeMin));
-          if (servings) formData.append('servings', String(servings));
-          if (rating) formData.append('rating', String(rating));
-          if (sourceUrl.trim()) formData.append('source_url', sourceUrl.trim());
-          if (notes.trim()) formData.append('notes', notes.trim());
-          formData.append('image', selectedImageFile);
-          
-          console.log('FormData contents:');
-          for (let [key, value] of formData.entries()) {
-            console.log(key, value);
+
+          if (stepsBulkMode) {
+            bulkRecipeData.stepsText = stepsBulkText;
+          } else {
+            bulkRecipeData.steps = steps.filter(s => s.trim()).map(s => s.trim());
           }
-          
-          await apiClient.createRecipeWithImage(formData);
+
+          await apiClient.updateRecipeBulk(id, bulkRecipeData);
         } else {
-          // Create recipe without image
-          console.log('Creating recipe without image');
+          // Use standard update API
           const recipeData: RecipeCreate = {
             title: title.trim(),
             description: description.trim() || undefined,
@@ -161,7 +141,123 @@ export function RecipeEdit() {
             notes: notes.trim() || undefined,
           };
           
-          await apiClient.createRecipe(recipeData);
+          await apiClient.updateRecipe(id, recipeData);
+        }
+        
+        // Handle image update if changed
+        if (imageChanged) {
+          if (selectedImageFile) {
+            await apiClient.uploadRecipeImage(id, selectedImageFile);
+          } else if (currentImageUrl && !selectedImageFile) {
+            // Remove image if it was deleted
+            await apiClient.deleteRecipeImage(id);
+          }
+        }
+      } else {
+        // Create new recipe
+        console.log('Creating new recipe, selectedImageFile:', selectedImageFile);
+        
+        if (selectedImageFile) {
+          // Create recipe with image - check if we should use bulk or individual mode
+          if (ingredientsBulkMode || stepsBulkMode) {
+            // Use bulk with image API
+            console.log('Creating recipe with image using bulk input');
+            const formData = new FormData();
+            formData.append('title', title.trim());
+            if (description.trim()) formData.append('description', description.trim());
+            
+            // Handle ingredients
+            if (ingredientsBulkMode) {
+              formData.append('ingredients_text', ingredientsBulkText);
+            } else {
+              formData.append('ingredients', JSON.stringify(ingredients.filter(i => i.trim()).map(i => i.trim())));
+            }
+            
+            // Handle steps
+            if (stepsBulkMode) {
+              formData.append('steps_text', stepsBulkText);
+            } else {
+              formData.append('steps', JSON.stringify(steps.filter(s => s.trim()).map(s => s.trim())));
+            }
+            
+            formData.append('tags', JSON.stringify(tags));
+            if (proteinType) formData.append('protein_type', proteinType);
+            formData.append('meal_type', mealType);
+            if (prepTimeMin) formData.append('prep_time_min', String(prepTimeMin));
+            if (cookTimeMin) formData.append('cook_time_min', String(cookTimeMin));
+            if (servings) formData.append('servings', String(servings));
+            if (rating) formData.append('rating', String(rating));
+            if (sourceUrl.trim()) formData.append('source_url', sourceUrl.trim());
+            if (notes.trim()) formData.append('notes', notes.trim());
+            formData.append('image', selectedImageFile);
+            
+            await apiClient.createRecipeWithImageBulk(formData);
+          } else {
+            // Use standard with image API
+            console.log('Creating recipe with image using individual input');
+            const formData = new FormData();
+            formData.append('title', title.trim());
+            if (description.trim()) formData.append('description', description.trim());
+            formData.append('ingredients', JSON.stringify(ingredients.filter(i => i.trim()).map(i => i.trim())));
+            formData.append('steps', JSON.stringify(steps.filter(s => s.trim()).map(s => s.trim())));
+            formData.append('tags', JSON.stringify(tags));
+            if (proteinType) formData.append('protein_type', proteinType);
+            formData.append('meal_type', mealType);
+            if (prepTimeMin) formData.append('prep_time_min', String(prepTimeMin));
+            if (cookTimeMin) formData.append('cook_time_min', String(cookTimeMin));
+            if (servings) formData.append('servings', String(servings));
+            if (rating) formData.append('rating', String(rating));
+            if (sourceUrl.trim()) formData.append('source_url', sourceUrl.trim());
+            if (notes.trim()) formData.append('notes', notes.trim());
+            formData.append('image', selectedImageFile);
+            
+            await apiClient.createRecipeWithImage(formData);
+          }
+        } else {
+          // Create recipe without image - check if we should use bulk or individual mode
+          if (ingredientsBulkMode || stepsBulkMode) {
+            // Use bulk API
+            console.log('Creating recipe without image using bulk input');
+            const bulkRecipeData: RecipeCreateBulk = {
+              title: title.trim(),
+              description: description.trim() || undefined,
+              ingredientsText: ingredientsBulkMode ? ingredientsBulkText : undefined,
+              stepsText: stepsBulkMode ? stepsBulkText : undefined,
+              ingredients: !ingredientsBulkMode ? ingredients.filter(i => i.trim()).map(i => i.trim()) : undefined,
+              steps: !stepsBulkMode ? steps.filter(s => s.trim()).map(s => s.trim()) : undefined,
+              tags,
+              proteinType: proteinType || undefined,
+              mealType,
+              prepTimeMin: prepTimeMin ? Number(prepTimeMin) : undefined,
+              cookTimeMin: cookTimeMin ? Number(cookTimeMin) : undefined,
+              servings: servings ? Number(servings) : undefined,
+              rating: rating ? Number(rating) : undefined,
+              sourceUrl: sourceUrl.trim() || undefined,
+              notes: notes.trim() || undefined,
+            };
+            
+            await apiClient.createRecipeBulk(bulkRecipeData);
+          } else {
+            // Use standard API
+            console.log('Creating recipe without image using individual input');
+            const recipeData: RecipeCreate = {
+              title: title.trim(),
+              description: description.trim() || undefined,
+              ingredients: ingredients.filter(i => i.trim()).map(i => i.trim()),
+              steps: steps.filter(s => s.trim()).map(s => s.trim()),
+              tags,
+              proteinType: proteinType || undefined,
+              mealType,
+              prepTimeMin: prepTimeMin ? Number(prepTimeMin) : undefined,
+              cookTimeMin: cookTimeMin ? Number(cookTimeMin) : undefined,
+              servings: servings ? Number(servings) : undefined,
+              rating: rating ? Number(rating) : undefined,
+              sourceUrl: sourceUrl.trim() || undefined,
+              notes: notes.trim() || undefined,
+            };
+            
+            await apiClient.createRecipe(recipeData);
+          }
         }
       }
       
@@ -226,6 +322,35 @@ export function RecipeEdit() {
 
   const removeTag = (tagToRemove: string) => {
     setTags(tags.filter(tag => tag !== tagToRemove));
+  };
+
+  // Functions to handle switching between individual and bulk modes
+  const switchToIngredientsBulkMode = () => {
+    // Convert current individual ingredients to bulk text
+    const bulkText = arrayToBulkText(ingredients.filter(i => i.trim()));
+    setIngredientsBulkText(bulkText);
+    setIngredientsBulkMode(true);
+  };
+
+  const switchToIngredientsIndividualMode = () => {
+    // Convert current bulk text to individual ingredients
+    const individualItems = parseBulkText(ingredientsBulkText);
+    setIngredients(individualItems.length > 0 ? individualItems : ['']);
+    setIngredientsBulkMode(false);
+  };
+
+  const switchToStepsBulkMode = () => {
+    // Convert current individual steps to bulk text
+    const bulkText = arrayToBulkText(steps.filter(s => s.trim()));
+    setStepsBulkText(bulkText);
+    setStepsBulkMode(true);
+  };
+
+  const switchToStepsIndividualMode = () => {
+    // Convert current bulk text to individual steps
+    const individualItems = parseBulkText(stepsBulkText);
+    setSteps(individualItems.length > 0 ? individualItems : ['']);
+    setStepsBulkMode(false);
   };
 
   if (loading) {
@@ -380,71 +505,141 @@ export function RecipeEdit() {
         {/* Ingredients */}
         <Card>
           <CardHeader>
-            <CardTitle>Ingredients</CardTitle>
-            <CardDescription>List all ingredients needed for this recipe</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {ingredients.map((ingredient, index) => (
-              <div key={index} className="flex space-x-2">
-                <Input
-                  value={ingredient}
-                  onChange={(e) => updateIngredient(index, e.target.value)}
-                  placeholder={`Ingredient ${index + 1}`}
-                  className="flex-1"
-                />
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>Ingredients</CardTitle>
+                <CardDescription>List all ingredients needed for this recipe</CardDescription>
+              </div>
+              <div className="flex space-x-2">
                 <Button
                   type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => removeIngredient(index)}
-                  disabled={ingredients.length === 1}
+                  variant={ingredientsBulkMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={ingredientsBulkMode ? switchToIngredientsIndividualMode : switchToIngredientsBulkMode}
                 >
-                  <X className="h-4 w-4" />
+                  {ingredientsBulkMode ? <List className="h-4 w-4 mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
+                  {ingredientsBulkMode ? "Individual" : "Bulk Input"}
                 </Button>
               </div>
-            ))}
-            <Button type="button" variant="outline" onClick={addIngredient}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Ingredient
-            </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {ingredientsBulkMode ? (
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Paste ingredients (one per line):
+                </label>
+                <Textarea
+                  value={ingredientsBulkText}
+                  onChange={(e) => setIngredientsBulkText(e.target.value)}
+                  placeholder="1 cup flour&#10;2 cups sugar&#10;3 eggs&#10;1 tsp vanilla extract"
+                  rows={8}
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Tip: Copy and paste your ingredient list. Each line will become a separate ingredient.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {ingredients.map((ingredient, index) => (
+                  <div key={index} className="flex space-x-2">
+                    <Input
+                      value={ingredient}
+                      onChange={(e) => updateIngredient(index, e.target.value)}
+                      placeholder={`Ingredient ${index + 1}`}
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => removeIngredient(index)}
+                      disabled={ingredients.length === 1}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" onClick={addIngredient}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Ingredient
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Steps */}
         <Card>
           <CardHeader>
-            <CardTitle>Instructions</CardTitle>
-            <CardDescription>Step-by-step cooking instructions</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {steps.map((step, index) => (
-              <div key={index} className="flex space-x-2">
-                <div className="flex-shrink-0 w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-medium">
-                  {index + 1}
-                </div>
-                <Textarea
-                  value={step}
-                  onChange={(e) => updateStep(index, e.target.value)}
-                  placeholder={`Step ${index + 1} instructions`}
-                  className="flex-1"
-                  rows={3}
-                />
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>Instructions</CardTitle>
+                <CardDescription>Step-by-step cooking instructions</CardDescription>
+              </div>
+              <div className="flex space-x-2">
                 <Button
                   type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => removeStep(index)}
-                  disabled={steps.length === 1}
-                  className="self-start"
+                  variant={stepsBulkMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={stepsBulkMode ? switchToStepsIndividualMode : switchToStepsBulkMode}
                 >
-                  <X className="h-4 w-4" />
+                  {stepsBulkMode ? <List className="h-4 w-4 mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
+                  {stepsBulkMode ? "Individual" : "Bulk Input"}
                 </Button>
               </div>
-            ))}
-            <Button type="button" variant="outline" onClick={addStep}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Step
-            </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {stepsBulkMode ? (
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Paste instructions (one step per line):
+                </label>
+                <Textarea
+                  value={stepsBulkText}
+                  onChange={(e) => setStepsBulkText(e.target.value)}
+                  placeholder="Preheat oven to 350°F&#10;Mix flour and sugar in a bowl&#10;Add eggs one at a time&#10;Bake for 25-30 minutes"
+                  rows={10}
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Tip: Copy and paste your recipe steps. Each line will become a separate step.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {steps.map((step, index) => (
+                  <div key={index} className="flex space-x-2">
+                    <div className="flex-shrink-0 w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-medium">
+                      {index + 1}
+                    </div>
+                    <Textarea
+                      value={step}
+                      onChange={(e) => updateStep(index, e.target.value)}
+                      placeholder={`Step ${index + 1} instructions`}
+                      className="flex-1"
+                      rows={3}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => removeStep(index)}
+                      disabled={steps.length === 1}
+                      className="self-start"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" onClick={addStep}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Step
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 

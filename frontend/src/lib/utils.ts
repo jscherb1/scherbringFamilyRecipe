@@ -18,18 +18,55 @@ export function formatDateTime(dateString: string): string {
 export function formatTime(minutes?: number): string {
   if (!minutes) return "";
   
-  if (minutes < 60) {
-    return `${minutes}m`;
-  }
-  
   const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
+  const mins = minutes % 60;
   
-  if (remainingMinutes === 0) {
-    return `${hours}h`;
+  if (hours > 0) {
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  }
+  return `${mins}m`;
+}
+
+/**
+ * Parse bulk text into an array of strings, splitting by line breaks and filtering out empty lines
+ * @param text - The bulk text to parse
+ * @returns Array of trimmed non-empty strings
+ */
+export function parseBulkText(text: string): string[] {
+  if (!text) return [];
+  
+  return text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+}
+
+/**
+ * Convert an array of strings to bulk text (joined by line breaks)
+ * @param items - Array of strings to join
+ * @returns Single string with items separated by newlines
+ */
+export function arrayToBulkText(items: string[]): string {
+  return items.join('\n');
+}
+
+/**
+ * Merge bulk text and individual items, with bulk text taking precedence
+ * @param bulkText - Bulk text to parse
+ * @param individualItems - Individual items array
+ * @returns Combined array with bulk text items first, then individual items
+ */
+export function mergeBulkAndIndividual(bulkText?: string, individualItems?: string[]): string[] {
+  const bulkItems = bulkText ? parseBulkText(bulkText) : [];
+  const individual = individualItems || [];
+  
+  // If we have bulk text, use that exclusively
+  if (bulkItems.length > 0) {
+    return bulkItems;
   }
   
-  return `${hours}h ${remainingMinutes}m`;
+  // Otherwise fall back to individual items
+  return individual;
 }
 
 export function getProteinTypeColor(proteinType?: string): string {

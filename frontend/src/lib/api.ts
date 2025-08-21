@@ -1,7 +1,9 @@
 import { 
   Recipe, 
   RecipeCreate, 
+  RecipeCreateBulk,
   RecipeUpdate, 
+  RecipeUpdateBulk,
   RecipeListResponse,
   MealPlan,
   MealPlanGenerate,
@@ -114,8 +116,31 @@ class ApiClient {
     });
   }
 
+  async createRecipeBulk(recipe: RecipeCreateBulk): Promise<Recipe> {
+    return this.request<Recipe>('/api/recipes/bulk', {
+      method: 'POST',
+      body: JSON.stringify(recipe),
+    });
+  }
+
   async createRecipeWithImage(formData: FormData): Promise<Recipe> {
     const url = `${API_BASE_URL}/api/recipes/with-image`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData, // Don't set Content-Type header for FormData
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    
+    return response.json();
+  }
+
+  async createRecipeWithImageBulk(formData: FormData): Promise<Recipe> {
+    const url = `${API_BASE_URL}/api/recipes/with-image-bulk`;
     
     const response = await fetch(url, {
       method: 'POST',
@@ -157,6 +182,13 @@ class ApiClient {
 
   async updateRecipe(id: string, recipe: RecipeUpdate): Promise<Recipe> {
     return this.request<Recipe>(`/api/recipes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(recipe),
+    });
+  }
+
+  async updateRecipeBulk(id: string, recipe: RecipeUpdateBulk): Promise<Recipe> {
+    return this.request<Recipe>(`/api/recipes/${id}/bulk`, {
       method: 'PATCH',
       body: JSON.stringify(recipe),
     });
