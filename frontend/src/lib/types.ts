@@ -201,3 +201,13 @@ export interface UserProfileUpdate {
   stapleGroceries?: string[];
   exportPrefs?: Record<string, any>;
 }
+
+export interface RecipeUrlParseRequest {
+  url: string;
+}
+
+export interface RecipeUrlParseResponse {
+  success: boolean;
+  recipeData?: RecipeCreateBulk;
+  error?: string;
+}

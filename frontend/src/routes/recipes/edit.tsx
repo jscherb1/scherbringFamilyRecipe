@@ -6,10 +6,11 @@ import { Textarea } from '../../components/ui/Textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { ImageUpload } from '../../components/ui/ImageUpload';
-import { Plus, X, Save, ArrowLeft, List, FileText } from 'lucide-react';
+import { Plus, X, Save, ArrowLeft, List, FileText, Link } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { RecipeCreate, RecipeCreateBulk, ProteinType, MealType } from '../../lib/types';
 import { parseBulkText, arrayToBulkText } from '../../lib/utils';
+import { UrlImportDialog } from '../../components/ui/UrlImportDialog';
 
 export function RecipeEdit() {
   const { id } = useParams();
@@ -45,6 +46,10 @@ export function RecipeEdit() {
   const [currentImageUrl, setCurrentImageUrl] = useState<string | undefined>();
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [imageChanged, setImageChanged] = useState(false);
+
+  // URL import state
+  const [showUrlImportDialog, setShowUrlImportDialog] = useState(false);
+  const [urlImportLoading, setUrlImportLoading] = useState(false);
 
   useEffect(() => {
     if (isEditing && id) {
@@ -239,6 +244,8 @@ export function RecipeEdit() {
               rating: rating ? Number(rating) : undefined,
               sourceUrl: sourceUrl.trim() || undefined,
               notes: notes.trim() || undefined,
+              imageUrl: currentImageUrl || undefined,
+              thumbnailUrl: undefined, // Will be set by backend if image is processed
             };
             
             await apiClient.createRecipeBulk(bulkRecipeData);
@@ -272,6 +279,64 @@ export function RecipeEdit() {
       alert('Failed to save recipe');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUrlImport = async (url: string) => {
+    try {
+      setUrlImportLoading(true);
+      
+      const response = await apiClient.parseRecipeFromUrl({ url });
+      
+      if (response.success && response.recipeData) {
+        const recipeData = response.recipeData;
+        
+        // Populate form with parsed data
+        setTitle(recipeData.title);
+        setDescription(recipeData.description || '');
+        
+        // Handle ingredients
+        if (recipeData.ingredientsText) {
+          setIngredientsBulkText(recipeData.ingredientsText);
+          setIngredientsBulkMode(true);
+        } else if (recipeData.ingredients && recipeData.ingredients.length > 0) {
+          setIngredients(recipeData.ingredients);
+          setIngredientsBulkText(arrayToBulkText(recipeData.ingredients));
+        }
+        
+        // Handle steps
+        if (recipeData.stepsText) {
+          setStepsBulkText(recipeData.stepsText);
+          setStepsBulkMode(true);
+        } else if (recipeData.steps && recipeData.steps.length > 0) {
+          setSteps(recipeData.steps);
+          setStepsBulkText(arrayToBulkText(recipeData.steps));
+        }
+        
+        // Set other fields
+        setTags(recipeData.tags || []);
+        setProteinType(recipeData.proteinType || '');
+        setMealType(recipeData.mealType || 'dinner');
+        setPrepTimeMin(recipeData.prepTimeMin || '');
+        setCookTimeMin(recipeData.cookTimeMin || '');
+        setServings(recipeData.servings || '');
+        setSourceUrl(recipeData.sourceUrl || url);
+        setNotes(recipeData.notes || '');
+        
+        // Handle image URL if provided
+        if (recipeData.imageUrl) {
+          setCurrentImageUrl(recipeData.imageUrl);
+        }
+        
+        alert('Recipe imported successfully! Please review and modify as needed.');
+      } else {
+        throw new Error(response.error || 'Failed to parse recipe from URL');
+      }
+    } catch (error) {
+      console.error('Failed to import recipe from URL:', error);
+      throw error; // Re-throw to let dialog handle the error display
+    } finally {
+      setUrlImportLoading(false);
     }
   };
 
@@ -372,19 +437,34 @@ export function RecipeEdit() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center space-x-4">
-        <Button variant="ghost" onClick={() => navigate('/recipes')}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Recipes
-        </Button>
-        <div>
-          <h1 className="text-3xl font-bold">
-            {isEditing ? 'Edit Recipe' : 'New Recipe'}
-          </h1>
-          <p className="text-muted-foreground">
-            {isEditing ? 'Update your recipe details' : 'Create a new recipe for your collection'}
-          </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <Button variant="ghost" onClick={() => navigate('/recipes')}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Recipes
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">
+              {isEditing ? 'Edit Recipe' : 'New Recipe'}
+            </h1>
+            <p className="text-muted-foreground">
+              {isEditing ? 'Update your recipe details' : 'Create a new recipe for your collection'}
+            </p>
+          </div>
         </div>
+        
+        {/* Import from URL button - only show when creating new recipe */}
+        {!isEditing && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setShowUrlImportDialog(true)}
+            className="shrink-0"
+          >
+            <Link className="h-4 w-4 mr-2" />
+            Import from URL
+          </Button>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -723,6 +803,14 @@ export function RecipeEdit() {
           </Button>
         </div>
       </form>
+
+      {/* URL Import Dialog */}
+      <UrlImportDialog
+        open={showUrlImportDialog}
+        onClose={() => setShowUrlImportDialog(false)}
+        onImport={handleUrlImport}
+        loading={urlImportLoading}
+      />
     </div>
   );
 }

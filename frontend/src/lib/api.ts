@@ -5,6 +5,8 @@ import {
   RecipeUpdate, 
   RecipeUpdateBulk,
   RecipeListResponse,
+  RecipeUrlParseRequest,
+  RecipeUrlParseResponse,
   MealPlan,
   MealPlanGenerate,
   MealPlanGenerateResponse,
@@ -120,6 +122,13 @@ class ApiClient {
     return this.request<Recipe>('/api/recipes/bulk', {
       method: 'POST',
       body: JSON.stringify(recipe),
+    });
+  }
+
+  async parseRecipeFromUrl(request: RecipeUrlParseRequest): Promise<RecipeUrlParseResponse> {
+    return this.request<RecipeUrlParseResponse>('/api/recipes/parse-url', {
+      method: 'POST',
+      body: JSON.stringify(request),
     });
   }
 

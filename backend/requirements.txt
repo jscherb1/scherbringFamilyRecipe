@@ -10,3 +10,4 @@ python-jose[cryptography]
 passlib[bcrypt]
 python-dotenv
 python-multipart
+recipe-scrapers==15.1.0

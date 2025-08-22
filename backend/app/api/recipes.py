@@ -2,9 +2,10 @@ from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, 
 from typing import List, Optional
 import logging
 import json
-from app.models.recipe import Recipe, RecipeCreate, RecipeCreateBulk, RecipeUpdate, RecipeUpdateBulk, ProteinType, MealType
+from app.models.recipe import Recipe, RecipeCreate, RecipeCreateBulk, RecipeUpdate, RecipeUpdateBulk, ProteinType, MealType, RecipeUrlParseRequest, RecipeUrlParseResponse
 from app.repositories.recipes import RecipeRepository
 from app.services.storage import storage_service
+from app.services.url_parser import url_parsing_service
 from app.deps import get_recipe_repository
 
 logger = logging.getLogger(__name__)
@@ -32,14 +33,80 @@ async def create_recipe_bulk(
 ):
     """Create a new recipe with bulk text input for ingredients and steps"""
     try:
+        logger.info(f"Creating bulk recipe with title: {recipe_data.title}")
+        logger.info(f"Image URL provided: {recipe_data.image_url}")
+        
         # Convert bulk input to standard recipe format
         standard_recipe_data = recipe_data.to_recipe_create()
-        return await repo.create_recipe(standard_recipe_data)
+        
+        # Create recipe first
+        recipe = await repo.create_recipe(standard_recipe_data)
+        
+        # Handle external image URL if provided
+        if recipe_data.image_url:
+            try:
+                logger.info(f"Downloading and uploading image from URL for recipe {recipe.id}")
+                original_url, thumbnail_url = await storage_service.download_and_upload_image_from_url(
+                    recipe.id, recipe_data.image_url
+                )
+                
+                if original_url and thumbnail_url:
+                    # Update recipe with image URLs
+                    from app.models.recipe import RecipeUpdate
+                    update_data = RecipeUpdate(
+                        image_url=original_url,
+                        thumbnail_url=thumbnail_url
+                    )
+                    
+                    updated_recipe = await repo.update_recipe(recipe.id, update_data)
+                    if updated_recipe:
+                        recipe = updated_recipe
+                        logger.info(f"Successfully uploaded external image for recipe {recipe.id}")
+                    else:
+                        logger.error(f"Failed to update recipe {recipe.id} with image URLs")
+                else:
+                    logger.warning(f"Failed to download/upload image from {recipe_data.image_url}")
+                    
+            except Exception as e:
+                logger.error(f"Error processing external image for recipe {recipe.id}: {e}")
+                # Don't fail the entire recipe creation if image processing fails
+                
+        return recipe
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating recipe with bulk input: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.post("/parse-url", response_model=RecipeUrlParseResponse)
+async def parse_recipe_from_url(request: RecipeUrlParseRequest):
+    """Parse a recipe from a URL and return structured recipe data"""
+    try:
+        logger.info(f"Parsing recipe from URL: {request.url}")
+        
+        # Use the URL parsing service to extract recipe data
+        recipe_data = await url_parsing_service.parse_recipe_from_url(request.url)
+        
+        return RecipeUrlParseResponse(
+            success=True,
+            recipe_data=recipe_data,
+            error=None
+        )
+        
+    except ValueError as e:
+        logger.warning(f"Failed to parse recipe from URL {request.url}: {str(e)}")
+        return RecipeUrlParseResponse(
+            success=False,
+            recipe_data=None,
+            error=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error parsing recipe from URL {request.url}: {str(e)}")
+        return RecipeUrlParseResponse(
+            success=False,
+            recipe_data=None,
+            error="An unexpected error occurred while parsing the recipe"
+        )
 
 @router.post("/with-image", response_model=Recipe)
 async def create_recipe_with_image(
