@@ -81,6 +81,54 @@ This guide covers how to deploy the Recipe Planner application in different envi
    VITE_API_BASE_URL=https://your-backend-app.azurewebsites.net
    ```
 
+### Automated Restart Process
+
+#### 🤖 GitHub Actions CI/CD (Recommended)
+
+The repository includes an automated GitHub Actions workflow that:
+1. Builds Docker images for both frontend and backend
+2. Pushes images to Azure Container Registry  
+3. **Automatically restarts both web apps** to deploy the latest versions
+
+**Setup Requirements:**
+
+**GitHub Secrets (All configuration in one place):**
+- `AZURE_CLIENT_ID` - Service principal app ID (GUID format)
+- `AZURE_CLIENT_SECRET` - Service principal password  
+- `AZURE_TENANT_ID` - Azure tenant ID (GUID format)
+- `AZURE_SUBSCRIPTION_ID` - Azure subscription ID (GUID format)
+- `ACR_NAME` - Container registry name (e.g., `myregistry`)
+- `ACR_LOGIN_SERVER` - Container registry server (e.g., `myregistry.azurecr.io`)
+- `RESOURCE_GROUP` - Azure resource group name (e.g., `recipe-app-prod-rg`)
+- `BACKEND_WEB_APP_NAME` - Backend web app name (e.g., `recipe-backend-prod`)
+- `FRONTEND_WEB_APP_NAME` - Frontend web app name (e.g., `recipe-frontend-prod`)
+
+#### 💻 Manual Restart Commands
+
+If you need to restart the applications manually:
+
+**Restart Backend:**
+```bash
+az webapp restart --name $BACKEND_WEB_APP_NAME --resource-group $RESOURCE_GROUP
+```
+
+**Restart Frontend:**
+```bash
+az webapp restart --name $FRONTEND_WEB_APP_NAME --resource-group $RESOURCE_GROUP
+```
+
+## Complete GitHub CI/CD Setup
+
+> 📋 **Detailed Guide**: See [GITHUB_SETUP.md](./GITHUB_SETUP.md) for complete step-by-step instructions on configuring GitHub repository secrets and variables for automated deployments.
+
+**⚠️ Important**: Ensure your service principal has the required permissions:
+- **AcrPush** role on the container registry (for pushing images)
+- **Website Contributor** or **Contributor** role on the web apps or resource group (for restarting apps)
+
+**🧪 Testing**: Use `./scripts/test-deployment.sh` to validate your setup before pushing to GitHub.
+
+The automated workflow handles building, pushing, and restarting your applications whenever you push changes to the main branch.
+
 ## Environment Variables Reference
 
 ### Backend
