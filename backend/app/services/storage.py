@@ -226,6 +226,70 @@ class StorageService:
         }
         return content_types.get(extension, 'image/jpeg')
 
+    async def download_and_upload_image_from_url(self, recipe_id: str, image_url: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Download an image from a URL and upload it to storage
+        Returns tuple of (original_url, thumbnail_url) or (None, None) if upload fails
+        """
+        if not self.blob_service_client:
+            logger.warning("Storage not configured, skipping image download")
+            return None, None
+            
+        if not image_url:
+            return None, None
+            
+        try:
+            import requests
+            from urllib.parse import urlparse
+            
+            # Add proper headers to avoid bot detection
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            }
+            
+            # Download the image
+            logger.info(f"Downloading image from URL: {image_url}")
+            response = requests.get(image_url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            # Check if it's actually an image
+            content_type = response.headers.get('content-type', '')
+            if not content_type.startswith('image/'):
+                logger.warning(f"URL does not point to an image: {content_type}")
+                return None, None
+                
+            # Get file extension from URL or content type
+            parsed_url = urlparse(image_url)
+            filename = parsed_url.path.split('/')[-1] if parsed_url.path else 'image'
+            
+            # If no extension in filename, add one based on content type
+            if '.' not in filename:
+                extension_map = {
+                    'image/jpeg': '.jpg',
+                    'image/jpg': '.jpg', 
+                    'image/png': '.png',
+                    'image/gif': '.gif',
+                    'image/webp': '.webp'
+                }
+                extension = extension_map.get(content_type, '.jpg')
+                filename = f"imported_image{extension}"
+            
+            # Upload the downloaded image
+            return await self.upload_recipe_image(recipe_id, filename, response.content)
+            
+        except requests.RequestException as e:
+            logger.error(f"Failed to download image from {image_url}: {e}")
+            return None, None
+        except Exception as e:
+            logger.error(f"Unexpected error downloading image from {image_url}: {e}")
+            return None, None
+
 
 # Global instance
 storage_service = StorageService()

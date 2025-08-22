@@ -360,3 +360,17 @@ class Recipe(RecipeBase):
                 processed_data[snake_case] = processed_data[camel_case]
         
         return cls(**processed_data)
+
+
+class RecipeUrlParseRequest(BaseModel):
+    """Request model for parsing recipe from URL"""
+    url: str = Field(..., description="URL of the recipe to parse")
+
+
+class RecipeUrlParseResponse(BaseModel):
+    """Response model for parsed recipe from URL"""
+    success: bool = Field(..., description="Whether parsing was successful")
+    recipe_data: Optional[RecipeCreateBulk] = Field(None, alias="recipeData", description="Parsed recipe data if successful")
+    error: Optional[str] = Field(None, description="Error message if parsing failed")
+    
+    model_config = ConfigDict(populate_by_name=True)
