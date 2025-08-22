@@ -159,10 +159,8 @@ class ExportService:
                     
                     ingredient_counts[base_name] += 1
         
-        # Format for todo app
+        # Format for todo app (no headers or blank lines for easy copy-paste)
         lines = []
-        lines.append(f"Shopping List - Week of {meal_plan.week_start_date.strftime('%B %d, %Y')}")
-        lines.append("")
         
         # Sort ingredients alphabetically
         for base_name in sorted(ingredient_counts.keys()):
@@ -215,10 +213,8 @@ class ExportService:
             if base_name not in ingredient_base_names:
                 staple_items.append(staple)
         
-        # Format for todo app
+        # Format for todo app (no headers or blank lines for easy copy-paste)
         lines = []
-        lines.append(f"Shopping List - Week of {meal_plan.week_start_date.strftime('%B %d, %Y')}")
-        lines.append("")
         
         # Add meal plan ingredients first
         meal_plan_ingredients = []
@@ -232,13 +228,10 @@ class ExportService:
                 meal_plan_ingredients.append(f"{original_ingredient}")
         
         if meal_plan_ingredients:
-            lines.append("# Meal Plan Ingredients")
             lines.extend(meal_plan_ingredients)
-            lines.append("")
         
         # Add staple items
         if staple_items:
-            lines.append("# Family Staple Items")
             lines.extend(sorted(staple_items))
         
         return "\n".join(lines)
