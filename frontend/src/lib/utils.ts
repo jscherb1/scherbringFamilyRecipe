@@ -37,8 +37,48 @@ export function parseBulkText(text: string): string[] {
   
   return text
     .split('\n')
-    .map(line => line.trim())
+    .map(line => cleanRecipeText(line.trim()))
     .filter(line => line.length > 0);
+}
+
+/**
+ * Clean text by removing unwanted characters commonly found in copy-pasted recipe content
+ * @param text - The text to clean
+ * @returns Cleaned text
+ */
+export function cleanRecipeText(text: string): string {
+  if (!text) return text;
+  
+  // Characters to remove (common in recipe websites)
+  const unwantedChars = [
+    '▢',  // Checkbox character
+    '☐',  // Empty checkbox
+    '☑',  // Checked checkbox
+    '✓',  // Checkmark
+    '✔',  // Heavy checkmark
+    '•',  // Bullet point (sometimes we want to keep these, but often they're unwanted)
+    '◦',  // White bullet
+    '▪',  // Black small square
+    '▫',  // White small square
+    '→',  // Right arrow
+    '⭐',  // Star
+    '★',  // Black star
+    '☆',  // White star
+  ];
+  
+  // Remove unwanted characters
+  let cleaned = text;
+  for (const char of unwantedChars) {
+    cleaned = cleaned.replace(new RegExp(char, 'g'), '');
+  }
+  
+  // Clean up extra whitespace
+  cleaned = cleaned.replace(/\s+/g, ' ');
+  
+  // Remove leading/trailing dashes or asterisks that might be left over
+  cleaned = cleaned.replace(/^[-*\s]+|[-*\s]+$/g, '');
+  
+  return cleaned.trim();
 }
 
 /**

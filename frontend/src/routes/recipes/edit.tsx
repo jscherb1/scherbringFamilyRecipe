@@ -36,8 +36,8 @@ export function RecipeEdit() {
   const [notes, setNotes] = useState('');
   
   // Bulk input state
-  const [ingredientsBulkMode, setIngredientsBulkMode] = useState(false);
-  const [stepsBulkMode, setStepsBulkMode] = useState(false);
+  const [ingredientsBulkMode, setIngredientsBulkMode] = useState(true);
+  const [stepsBulkMode, setStepsBulkMode] = useState(true);
   const [ingredientsBulkText, setIngredientsBulkText] = useState('');
   const [stepsBulkText, setStepsBulkText] = useState('');
   
@@ -61,6 +61,11 @@ export function RecipeEdit() {
       setDescription(recipe.description || '');
       setIngredients(recipe.ingredients.length > 0 ? recipe.ingredients : ['']);
       setSteps(recipe.steps.length > 0 ? recipe.steps : ['']);
+      
+      // Also populate bulk text fields since bulk mode is now default
+      setIngredientsBulkText(arrayToBulkText(recipe.ingredients));
+      setStepsBulkText(arrayToBulkText(recipe.steps));
+      
       setTags(recipe.tags);
       setProteinType(recipe.proteinType || '');
       setMealType(recipe.mealType);
@@ -513,12 +518,12 @@ export function RecipeEdit() {
               <div className="flex space-x-2">
                 <Button
                   type="button"
-                  variant={ingredientsBulkMode ? "default" : "outline"}
+                  variant={ingredientsBulkMode ? "outline" : "default"}
                   size="sm"
                   onClick={ingredientsBulkMode ? switchToIngredientsIndividualMode : switchToIngredientsBulkMode}
                 >
                   {ingredientsBulkMode ? <List className="h-4 w-4 mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
-                  {ingredientsBulkMode ? "Individual" : "Bulk Input"}
+                  {ingredientsBulkMode ? "Switch to Individual" : "Switch to Bulk"}
                 </Button>
               </div>
             </div>
@@ -581,12 +586,12 @@ export function RecipeEdit() {
               <div className="flex space-x-2">
                 <Button
                   type="button"
-                  variant={stepsBulkMode ? "default" : "outline"}
+                  variant={stepsBulkMode ? "outline" : "default"}
                   size="sm"
                   onClick={stepsBulkMode ? switchToStepsIndividualMode : switchToStepsBulkMode}
                 >
                   {stepsBulkMode ? <List className="h-4 w-4 mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
-                  {stepsBulkMode ? "Individual" : "Bulk Input"}
+                  {stepsBulkMode ? "Switch to Individual" : "Switch to Bulk"}
                 </Button>
               </div>
             </div>

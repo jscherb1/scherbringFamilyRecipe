@@ -71,10 +71,10 @@ class RecipeCreateBulk(BaseModel):
         if self.ingredients_text:
             # Split by line breaks and clean up
             bulk_ingredients = [
-                line.strip() for line in self.ingredients_text.split('\n') 
+                self._clean_text(line.strip()) for line in self.ingredients_text.split('\n') 
                 if line.strip()
             ]
-            final_ingredients.extend(bulk_ingredients)
+            final_ingredients.extend([ing for ing in bulk_ingredients if ing])  # Filter out empty strings after cleaning
         if self.ingredients:
             final_ingredients.extend(self.ingredients)
             
@@ -83,10 +83,10 @@ class RecipeCreateBulk(BaseModel):
         if self.steps_text:
             # Split by line breaks and clean up
             bulk_steps = [
-                line.strip() for line in self.steps_text.split('\n') 
+                self._clean_text(line.strip()) for line in self.steps_text.split('\n') 
                 if line.strip()
             ]
-            final_steps.extend(bulk_steps)
+            final_steps.extend([step for step in bulk_steps if step])  # Filter out empty strings after cleaning
         if self.steps:
             final_steps.extend(self.steps)
             
@@ -109,6 +109,41 @@ class RecipeCreateBulk(BaseModel):
             image_url=self.image_url,
             thumbnail_url=self.thumbnail_url
         )
+    
+    def _clean_text(self, text: str) -> str:
+        """Clean text by removing unwanted characters commonly found in copy-pasted content"""
+        if not text:
+            return text
+            
+        # Characters to remove (common in recipe websites)
+        unwanted_chars = [
+            '▢',  # Checkbox character
+            '☐',  # Empty checkbox
+            '☑',  # Checked checkbox
+            '✓',  # Checkmark
+            '✔',  # Heavy checkmark
+            '•',  # Bullet point (sometimes we want to keep these, but often they're unwanted)
+            '◦',  # White bullet
+            '▪',  # Black small square
+            '▫',  # White small square
+            '→',  # Right arrow
+            '⭐',  # Star
+            '★',  # Black star
+            '☆',  # White star
+        ]
+        
+        # Remove unwanted characters
+        cleaned = text
+        for char in unwanted_chars:
+            cleaned = cleaned.replace(char, '')
+        
+        # Clean up extra whitespace
+        cleaned = ' '.join(cleaned.split())
+        
+        # Remove leading/trailing dashes or asterisks that might be left over
+        cleaned = cleaned.strip('- *')
+        
+        return cleaned.strip()
 
 class RecipeCreate(RecipeBase):
     pass
@@ -165,9 +200,10 @@ class RecipeUpdateBulk(BaseModel):
         if self.ingredients_text is not None:
             # Split by line breaks and clean up
             final_ingredients = [
-                line.strip() for line in self.ingredients_text.split('\n') 
+                self._clean_text(line.strip()) for line in self.ingredients_text.split('\n') 
                 if line.strip()
             ]
+            final_ingredients = [ing for ing in final_ingredients if ing]  # Filter out empty strings after cleaning
         elif self.ingredients is not None:
             final_ingredients = self.ingredients
             
@@ -176,9 +212,10 @@ class RecipeUpdateBulk(BaseModel):
         if self.steps_text is not None:
             # Split by line breaks and clean up
             final_steps = [
-                line.strip() for line in self.steps_text.split('\n') 
+                self._clean_text(line.strip()) for line in self.steps_text.split('\n') 
                 if line.strip()
             ]
+            final_steps = [step for step in final_steps if step]  # Filter out empty strings after cleaning
         elif self.steps is not None:
             final_steps = self.steps
             
@@ -201,6 +238,41 @@ class RecipeUpdateBulk(BaseModel):
             image_url=self.image_url,
             thumbnail_url=self.thumbnail_url
         )
+    
+    def _clean_text(self, text: str) -> str:
+        """Clean text by removing unwanted characters commonly found in copy-pasted content"""
+        if not text:
+            return text
+            
+        # Characters to remove (common in recipe websites)
+        unwanted_chars = [
+            '▢',  # Checkbox character
+            '☐',  # Empty checkbox
+            '☑',  # Checked checkbox
+            '✓',  # Checkmark
+            '✔',  # Heavy checkmark
+            '•',  # Bullet point (sometimes we want to keep these, but often they're unwanted)
+            '◦',  # White bullet
+            '▪',  # Black small square
+            '▫',  # White small square
+            '→',  # Right arrow
+            '⭐',  # Star
+            '★',  # Black star
+            '☆',  # White star
+        ]
+        
+        # Remove unwanted characters
+        cleaned = text
+        for char in unwanted_chars:
+            cleaned = cleaned.replace(char, '')
+        
+        # Clean up extra whitespace
+        cleaned = ' '.join(cleaned.split())
+        
+        # Remove leading/trailing dashes or asterisks that might be left over
+        cleaned = cleaned.strip('- *')
+        
+        return cleaned.strip()
 
 class Recipe(RecipeBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
