@@ -8,6 +8,9 @@ on:
 env:
   ACR_NAME: ${{ secrets.ACR_NAME }}
   ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+  RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
+  BACKEND_WEB_APP_NAME: ${{ secrets.BACKEND_WEB_APP_NAME }}
+  FRONTEND_WEB_APP_NAME: ${{ secrets.FRONTEND_WEB_APP_NAME }}
 
 jobs:
   build-and-push:
@@ -34,3 +37,15 @@ jobs:
       run: |
         docker build -t $ACR_LOGIN_SERVER/scherbringfamilyrecipe-frontend:latest ./frontend
         docker push $ACR_LOGIN_SERVER/scherbringfamilyrecipe-frontend:latest
+
+    - name: Restart backend web app
+      run: |
+        echo "🔄 Restarting backend web app: $BACKEND_WEB_APP_NAME"
+        az webapp restart --name $BACKEND_WEB_APP_NAME --resource-group $RESOURCE_GROUP
+        echo "✅ Backend web app restarted successfully"
+
+    - name: Restart frontend web app
+      run: |
+        echo "🔄 Restarting frontend web app: $FRONTEND_WEB_APP_NAME"
+        az webapp restart --name $FRONTEND_WEB_APP_NAME --resource-group $RESOURCE_GROUP
+        echo "✅ Frontend web app restarted successfully"
