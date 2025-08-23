@@ -118,8 +118,8 @@ class MealPlannerService:
         eligible = []
         
         for recipe in all_recipes:
-            # Skip if meal type is not dinner
-            if recipe.meal_type != "dinner":
+            # Only include breakfast, lunch, and dinner meal types (exclude snack and misc)
+            if recipe.meal_type not in ["breakfast", "lunch", "dinner"]:
                 continue
             
             # Check required recipes
