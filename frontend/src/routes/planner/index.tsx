@@ -112,9 +112,8 @@ export function PlannerIndex() {
 
     setGenerating(true);
     try {
-      // Get all available dinner recipes
+      // Get all available recipes for meal planning (breakfast, lunch, dinner)
       const recipesResponse = await apiClient.getRecipes({ 
-        mealType: 'dinner',
         pageSize: 100 
       });
 
@@ -188,9 +187,8 @@ export function PlannerIndex() {
 
   const openRecipeSelector = async (dayIndex: number) => {
     try {
-      // Fetch all dinner recipes
+      // Fetch all recipes suitable for meal planning (breakfast, lunch, dinner)
       const response = await apiClient.getRecipes({ 
-        mealType: 'dinner',
         pageSize: 100 
       });
       setAvailableRecipes(response.recipes);
@@ -306,9 +304,8 @@ export function PlannerIndex() {
         return entryDate === dayDate;
       });
       
-      // Fetch all dinner recipes
+      // Fetch all recipes suitable for meal planning (breakfast, lunch, dinner)
       const response = await apiClient.getRecipes({ 
-        mealType: 'dinner',
         pageSize: 100 
       });
       
@@ -684,15 +681,23 @@ function RecipeSelectionModal({
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   
-  const filteredRecipes = recipes.filter(recipe =>
-    recipe.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    recipe.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Filter recipes to only show main meal types (breakfast, lunch, dinner)
+  const allowedMealTypes = ['breakfast', 'lunch', 'dinner'];
+  const filteredRecipes = recipes
+    .filter(recipe => {
+      // Only include recipes with allowed meal types
+      if (!allowedMealTypes.includes(recipe.mealType)) {
+        return false;
+      }
+      // Then apply search filter
+      return recipe.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+             recipe.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+    });
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <Card className="w-full max-w-2xl max-h-[80vh] m-4">
-        <CardHeader>
+      <Card className="w-full max-w-2xl max-h-[80vh] m-4 flex flex-col">
+        <CardHeader className="flex-shrink-0">
           <div className="flex items-center justify-between">
             <CardTitle>Select a Recipe</CardTitle>
             <Button variant="ghost" size="sm" onClick={onClose}>
@@ -705,7 +710,7 @@ function RecipeSelectionModal({
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </CardHeader>
-        <CardContent className="overflow-y-auto">
+        <CardContent className="flex-1 overflow-y-auto min-h-0">
           <div className="space-y-2">
             {filteredRecipes.map((recipe) => (
               <div

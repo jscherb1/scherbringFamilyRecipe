@@ -1,8 +1,15 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Union
 from enum import Enum
 from pydantic import BaseModel, Field, ConfigDict
 import uuid
+
+class Ingredient(BaseModel):
+    """Ingredient model with optional shopping list inclusion"""
+    text: str = Field(..., min_length=1, description="The ingredient text")
+    includeInShoppingList: bool = Field(default=True, alias="include_in_shopping_list", description="Whether to include this ingredient in shopping lists")
+    
+    model_config = ConfigDict(populate_by_name=True)
 
 class ProteinType(str, Enum):
     BEEF = "beef"
@@ -24,7 +31,7 @@ class MealType(str, Enum):
 class RecipeBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
-    ingredients: List[str] = Field(default_factory=list)
+    ingredients: List[Union[Ingredient, str]] = Field(default_factory=list)
     steps: List[str] = Field(default_factory=list)
     tags: List[str] = Field(default_factory=list)
     protein_type: Optional[ProteinType] = Field(None, alias="proteinType")
@@ -46,7 +53,7 @@ class RecipeCreateBulk(BaseModel):
     description: Optional[str] = None
     ingredients_text: Optional[str] = Field(None, alias="ingredientsText", description="Ingredients as bulk text, separated by line breaks")
     steps_text: Optional[str] = Field(None, alias="stepsText", description="Steps as bulk text, separated by line breaks")
-    ingredients: Optional[List[str]] = Field(default_factory=list, description="Individual ingredients list (alternative to ingredientsText)")
+    ingredients: Optional[List[Union[Ingredient, str]]] = Field(default_factory=list, description="Individual ingredients list (alternative to ingredientsText)")
     steps: Optional[List[str]] = Field(default_factory=list, description="Individual steps list (alternative to stepsText)")
     tags: List[str] = Field(default_factory=list)
     protein_type: Optional[ProteinType] = Field(None, alias="proteinType")
@@ -74,9 +81,18 @@ class RecipeCreateBulk(BaseModel):
                 self._clean_text(line.strip()) for line in self.ingredients_text.split('\n') 
                 if line.strip()
             ]
-            final_ingredients.extend([ing for ing in bulk_ingredients if ing])  # Filter out empty strings after cleaning
+            # Convert string ingredients to Ingredient objects with default includeInShoppingList=True
+            final_ingredients.extend([
+                Ingredient(text=ing, includeInShoppingList=True) for ing in bulk_ingredients if ing
+            ])
         if self.ingredients:
-            final_ingredients.extend(self.ingredients)
+            # Handle mixed list of strings and Ingredient objects
+            for ingredient in self.ingredients:
+                if isinstance(ingredient, str):
+                    if ingredient.strip():
+                        final_ingredients.append(Ingredient(text=ingredient.strip(), includeInShoppingList=True))
+                else:
+                    final_ingredients.append(ingredient)
             
         # Process steps
         final_steps = []
@@ -151,7 +167,7 @@ class RecipeCreate(RecipeBase):
 class RecipeUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
-    ingredients: Optional[List[str]] = None
+    ingredients: Optional[List[Union[Ingredient, str]]] = None
     steps: Optional[List[str]] = None
     tags: Optional[List[str]] = None
     protein_type: Optional[ProteinType] = Field(None, alias="proteinType")
@@ -175,7 +191,7 @@ class RecipeUpdateBulk(BaseModel):
     description: Optional[str] = None
     ingredients_text: Optional[str] = Field(None, alias="ingredientsText", description="Ingredients as bulk text, separated by line breaks")
     steps_text: Optional[str] = Field(None, alias="stepsText", description="Steps as bulk text, separated by line breaks")
-    ingredients: Optional[List[str]] = None
+    ingredients: Optional[List[Union[Ingredient, str]]] = None
     steps: Optional[List[str]] = None
     tags: Optional[List[str]] = None
     protein_type: Optional[ProteinType] = Field(None, alias="proteinType")
@@ -199,13 +215,23 @@ class RecipeUpdateBulk(BaseModel):
         final_ingredients = None
         if self.ingredients_text is not None:
             # Split by line breaks and clean up
-            final_ingredients = [
+            ingredient_texts = [
                 self._clean_text(line.strip()) for line in self.ingredients_text.split('\n') 
                 if line.strip()
             ]
-            final_ingredients = [ing for ing in final_ingredients if ing]  # Filter out empty strings after cleaning
+            # Convert to Ingredient objects with default includeInShoppingList=True
+            final_ingredients = [
+                Ingredient(text=ing, includeInShoppingList=True) for ing in ingredient_texts if ing
+            ]
         elif self.ingredients is not None:
-            final_ingredients = self.ingredients
+            # Handle mixed list of strings and Ingredient objects
+            final_ingredients = []
+            for ingredient in self.ingredients:
+                if isinstance(ingredient, str):
+                    if ingredient.strip():
+                        final_ingredients.append(Ingredient(text=ingredient.strip(), includeInShoppingList=True))
+                else:
+                    final_ingredients.append(ingredient)
             
         # Process steps
         final_steps = None
@@ -287,6 +313,41 @@ class Recipe(RecipeBase):
         """Calculate total time from prep and cook time if not provided"""
         if self.total_time_min is None and self.prep_time_min and self.cook_time_min:
             self.total_time_min = self.prep_time_min + self.cook_time_min
+        return self
+
+    def get_ingredients_for_shopping_list(self) -> List[str]:
+        """Get ingredients that should be included in shopping lists"""
+        shopping_ingredients = []
+        for ingredient in self.ingredients:
+            if isinstance(ingredient, str):
+                # Legacy string ingredient - include by default for backward compatibility
+                shopping_ingredients.append(ingredient)
+            elif isinstance(ingredient, Ingredient):
+                # New ingredient object - check the flag
+                if ingredient.includeInShoppingList:
+                    shopping_ingredients.append(ingredient.text)
+        return shopping_ingredients
+
+    def get_all_ingredients_text(self) -> List[str]:
+        """Get all ingredient texts regardless of shopping list flag"""
+        ingredient_texts = []
+        for ingredient in self.ingredients:
+            if isinstance(ingredient, str):
+                ingredient_texts.append(ingredient)
+            elif isinstance(ingredient, Ingredient):
+                ingredient_texts.append(ingredient.text)
+        return ingredient_texts
+
+    def normalize_ingredients(self):
+        """Convert any string ingredients to Ingredient objects for consistency"""
+        normalized_ingredients = []
+        for ingredient in self.ingredients:
+            if isinstance(ingredient, str):
+                # Convert legacy string to Ingredient object with default includeInShoppingList=True
+                normalized_ingredients.append(Ingredient(text=ingredient, includeInShoppingList=True))
+            else:
+                normalized_ingredients.append(ingredient)
+        self.ingredients = normalized_ingredients
         return self
 
     def model_dump(self, **kwargs):

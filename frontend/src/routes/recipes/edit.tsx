@@ -5,11 +5,13 @@ import { Input } from '../../components/ui/Input';
 import { Textarea } from '../../components/ui/Textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
+import { Checkbox } from '../../components/ui/Checkbox';
 import { ImageUpload } from '../../components/ui/ImageUpload';
-import { Plus, X, Save, ArrowLeft, List, FileText, Link } from 'lucide-react';
+import { TagInput } from '../../components/ui/TagInput';
+import { Plus, X, Save, ArrowLeft, List, FileText, Link, ShoppingCart } from 'lucide-react';
 import { apiClient } from '../../lib/api';
-import { RecipeCreate, RecipeCreateBulk, ProteinType, MealType } from '../../lib/types';
-import { parseBulkText, arrayToBulkText } from '../../lib/utils';
+import { RecipeCreate, RecipeCreateBulk, ProteinType, MealType, Ingredient } from '../../lib/types';
+import { parseBulkText, arrayToBulkText, getIngredientText, getIngredientShoppingFlag, createIngredientFromText, normalizeIngredients, filterValidIngredients } from '../../lib/utils';
 import { UrlImportDialog } from '../../components/ui/UrlImportDialog';
 
 export function RecipeEdit() {
@@ -23,10 +25,10 @@ export function RecipeEdit() {
   // Form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [ingredients, setIngredients] = useState<string[]>(['']);
+  const [ingredients, setIngredients] = useState<(Ingredient | string)[]>([createIngredientFromText('', true)]);
   const [steps, setSteps] = useState<string[]>(['']);
   const [tags, setTags] = useState<string[]>([]);
-  const [newTag, setNewTag] = useState('');
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [proteinType, setProteinType] = useState<ProteinType | ''>('');
   const [mealType, setMealType] = useState<MealType>('dinner');
   const [prepTimeMin, setPrepTimeMin] = useState<number | ''>('');
@@ -57,6 +59,26 @@ export function RecipeEdit() {
     }
   }, [id, isEditing]);
 
+  useEffect(() => {
+    loadAvailableTags();
+  }, []);
+
+  const loadAvailableTags = async () => {
+    try {
+      const allTags = await apiClient.getTags();
+      setAvailableTags(allTags);
+    } catch (error) {
+      console.error('Failed to load available tags:', error);
+    }
+  };
+
+  const handleNewTagCreated = (newTag: string) => {
+    // Add the newly created tag to available tags
+    if (!availableTags.includes(newTag)) {
+      setAvailableTags([...availableTags, newTag]);
+    }
+  };
+
   const loadRecipe = async (recipeId: string) => {
     try {
       setLoading(true);
@@ -64,7 +86,7 @@ export function RecipeEdit() {
       
       setTitle(recipe.title);
       setDescription(recipe.description || '');
-      setIngredients(recipe.ingredients.length > 0 ? recipe.ingredients : ['']);
+      setIngredients(recipe.ingredients.length > 0 ? recipe.ingredients : [createIngredientFromText('', true)]);
       setSteps(recipe.steps.length > 0 ? recipe.steps : ['']);
       
       // Also populate bulk text fields since bulk mode is now default
@@ -123,7 +145,7 @@ export function RecipeEdit() {
           if (ingredientsBulkMode) {
             bulkRecipeData.ingredientsText = ingredientsBulkText;
           } else {
-            bulkRecipeData.ingredients = ingredients.filter(i => i.trim()).map(i => i.trim());
+            bulkRecipeData.ingredients = filterValidIngredients(ingredients);
           }
 
           if (stepsBulkMode) {
@@ -138,7 +160,7 @@ export function RecipeEdit() {
           const recipeData: RecipeCreate = {
             title: title.trim(),
             description: description.trim() || undefined,
-            ingredients: ingredients.filter(i => i.trim()).map(i => i.trim()),
+            ingredients: filterValidIngredients(ingredients),
             steps: steps.filter(s => s.trim()).map(s => s.trim()),
             tags,
             proteinType: proteinType || undefined,
@@ -180,7 +202,7 @@ export function RecipeEdit() {
             if (ingredientsBulkMode) {
               formData.append('ingredients_text', ingredientsBulkText);
             } else {
-              formData.append('ingredients', JSON.stringify(ingredients.filter(i => i.trim()).map(i => i.trim())));
+              formData.append('ingredients', JSON.stringify(filterValidIngredients(ingredients)));
             }
             
             // Handle steps
@@ -208,7 +230,7 @@ export function RecipeEdit() {
             const formData = new FormData();
             formData.append('title', title.trim());
             if (description.trim()) formData.append('description', description.trim());
-            formData.append('ingredients', JSON.stringify(ingredients.filter(i => i.trim()).map(i => i.trim())));
+            formData.append('ingredients', JSON.stringify(filterValidIngredients(ingredients)));
             formData.append('steps', JSON.stringify(steps.filter(s => s.trim()).map(s => s.trim())));
             formData.append('tags', JSON.stringify(tags));
             if (proteinType) formData.append('protein_type', proteinType);
@@ -233,7 +255,7 @@ export function RecipeEdit() {
               description: description.trim() || undefined,
               ingredientsText: ingredientsBulkMode ? ingredientsBulkText : undefined,
               stepsText: stepsBulkMode ? stepsBulkText : undefined,
-              ingredients: !ingredientsBulkMode ? ingredients.filter(i => i.trim()).map(i => i.trim()) : undefined,
+              ingredients: !ingredientsBulkMode ? filterValidIngredients(ingredients) : undefined,
               steps: !stepsBulkMode ? steps.filter(s => s.trim()).map(s => s.trim()) : undefined,
               tags,
               proteinType: proteinType || undefined,
@@ -255,7 +277,7 @@ export function RecipeEdit() {
             const recipeData: RecipeCreate = {
               title: title.trim(),
               description: description.trim() || undefined,
-              ingredients: ingredients.filter(i => i.trim()).map(i => i.trim()),
+              ingredients: filterValidIngredients(ingredients),
               steps: steps.filter(s => s.trim()).map(s => s.trim()),
               tags,
               proteinType: proteinType || undefined,
@@ -300,8 +322,12 @@ export function RecipeEdit() {
           setIngredientsBulkText(recipeData.ingredientsText);
           setIngredientsBulkMode(true);
         } else if (recipeData.ingredients && recipeData.ingredients.length > 0) {
-          setIngredients(recipeData.ingredients);
-          setIngredientsBulkText(arrayToBulkText(recipeData.ingredients));
+          // Convert parsed ingredients to Ingredient objects if they're strings
+          const normalizedIngredients = recipeData.ingredients.map(ing => 
+            typeof ing === 'string' ? createIngredientFromText(ing, true) : ing
+          );
+          setIngredients(normalizedIngredients);
+          setIngredientsBulkText(arrayToBulkText(normalizedIngredients));
         }
         
         // Handle steps
@@ -341,12 +367,40 @@ export function RecipeEdit() {
   };
 
   const addIngredient = () => {
-    setIngredients([...ingredients, '']);
+    setIngredients([...ingredients, createIngredientFromText('', true)]);
   };
 
   const updateIngredient = (index: number, value: string) => {
     const newIngredients = [...ingredients];
-    newIngredients[index] = value;
+    const currentIngredient = newIngredients[index];
+    
+    if (typeof currentIngredient === 'string') {
+      // Convert to Ingredient object, preserving the default shopping list flag
+      newIngredients[index] = createIngredientFromText(value, true);
+    } else {
+      // Update existing Ingredient object, preserving the shopping list flag
+      newIngredients[index] = {
+        ...currentIngredient,
+        text: value
+      };
+    }
+    setIngredients(newIngredients);
+  };
+
+  const updateIngredientShoppingFlag = (index: number, includeInShoppingList: boolean) => {
+    const newIngredients = [...ingredients];
+    const currentIngredient = newIngredients[index];
+    
+    if (typeof currentIngredient === 'string') {
+      // Convert to Ingredient object with the specified flag
+      newIngredients[index] = createIngredientFromText(currentIngredient, includeInShoppingList);
+    } else {
+      // Update existing Ingredient object
+      newIngredients[index] = {
+        ...currentIngredient,
+        includeInShoppingList
+      };
+    }
     setIngredients(newIngredients);
   };
 
@@ -383,21 +437,10 @@ export function RecipeEdit() {
     setImageChanged(true);
   };
 
-  const addTag = () => {
-    if (newTag.trim() && !tags.includes(newTag.trim())) {
-      setTags([...tags, newTag.trim()]);
-      setNewTag('');
-    }
-  };
-
-  const removeTag = (tagToRemove: string) => {
-    setTags(tags.filter(tag => tag !== tagToRemove));
-  };
-
   // Functions to handle switching between individual and bulk modes
   const switchToIngredientsBulkMode = () => {
     // Convert current individual ingredients to bulk text
-    const bulkText = arrayToBulkText(ingredients.filter(i => i.trim()));
+    const bulkText = arrayToBulkText(filterValidIngredients(ingredients));
     setIngredientsBulkText(bulkText);
     setIngredientsBulkMode(true);
   };
@@ -405,7 +448,10 @@ export function RecipeEdit() {
   const switchToIngredientsIndividualMode = () => {
     // Convert current bulk text to individual ingredients
     const individualItems = parseBulkText(ingredientsBulkText);
-    setIngredients(individualItems.length > 0 ? individualItems : ['']);
+    const ingredientObjects = individualItems.length > 0 
+      ? individualItems.map(text => createIngredientFromText(text, true))
+      : [createIngredientFromText('', true)];
+    setIngredients(ingredientObjects);
     setIngredientsBulkMode(false);
   };
 
@@ -627,25 +673,43 @@ export function RecipeEdit() {
               </div>
             ) : (
               <div className="space-y-4">
-                {ingredients.map((ingredient, index) => (
-                  <div key={index} className="flex space-x-2">
-                    <Input
-                      value={ingredient}
-                      onChange={(e) => updateIngredient(index, e.target.value)}
-                      placeholder={`Ingredient ${index + 1}`}
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => removeIngredient(index)}
-                      disabled={ingredients.length === 1}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
+                {ingredients.map((ingredient, index) => {
+                  const ingredientText = getIngredientText(ingredient);
+                  const includeInShopping = getIngredientShoppingFlag(ingredient);
+                  
+                  return (
+                    <div key={index} className="space-y-2">
+                      <div className="flex space-x-2">
+                        <Input
+                          value={ingredientText}
+                          onChange={(e) => updateIngredient(index, e.target.value)}
+                          placeholder={`Ingredient ${index + 1}`}
+                          className="flex-1"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => removeIngredient(index)}
+                          disabled={ingredients.length === 1}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="flex items-center space-x-2 ml-2">
+                        <Checkbox
+                          id={`shopping-${index}`}
+                          checked={includeInShopping}
+                          onChange={(e) => updateIngredientShoppingFlag(index, e.target.checked)}
+                        />
+                        <label htmlFor={`shopping-${index}`} className="text-sm text-gray-600 flex items-center">
+                          <ShoppingCart className="h-3 w-3 mr-1" />
+                          Include in shopping list
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
                 <Button type="button" variant="outline" onClick={addIngredient}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Ingredient
@@ -734,30 +798,33 @@ export function RecipeEdit() {
             <CardTitle>Tags</CardTitle>
             <CardDescription>Add tags to help categorize and search for this recipe</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex space-x-2">
-              <Input
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                placeholder="Add a tag"
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-              />
-              <Button type="button" onClick={addTag}>
-                Add Tag
-              </Button>
-            </div>
+          <CardContent>
+            <TagInput
+              tags={tags}
+              onTagsChange={setTags}
+              availableTags={availableTags}
+              onNewTagCreated={handleNewTagCreated}
+              placeholder="Type to search tags or create new..."
+              showSelectedTags={false}
+            />
             
+            {/* Selected tags display */}
             {tags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="flex items-center space-x-1">
-                    <span>{tag}</span>
-                    <X
-                      className="h-3 w-3 cursor-pointer"
-                      onClick={() => removeTag(tag)}
-                    />
-                  </Badge>
-                ))}
+              <div className="mt-4">
+                <label className="text-sm font-medium text-gray-700 mb-2 block">
+                  Selected Tags ({tags.length})
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((tag) => (
+                    <Badge key={tag} variant="secondary" className="flex items-center space-x-1">
+                      <span>{tag}</span>
+                      <X
+                        className="h-3 w-3 cursor-pointer hover:text-red-500"
+                        onClick={() => setTags(tags.filter(t => t !== tag))}
+                      />
+                    </Badge>
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>
