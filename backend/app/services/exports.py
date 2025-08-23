@@ -36,7 +36,7 @@ class ExportService:
             
             date_str = entry.date.strftime('%Y-%m-%d (%A)')
             recipe_name = recipe.title if recipe else 'No recipe'
-            ingredients = '; '.join(recipe.ingredients) if recipe else ''
+            ingredients = '; '.join(recipe.get_all_ingredients_text()) if recipe else ''
             notes = entry.notes or ''
             
             writer.writerow([date_str, recipe_name, ingredients, notes])
@@ -75,7 +75,7 @@ class ExportService:
                     "id": recipe.id,
                     "title": recipe.title,
                     "description": recipe.description,
-                    "ingredients": recipe.ingredients,
+                    "ingredients": recipe.get_all_ingredients_text(),
                     "steps": recipe.steps,
                     "tags": recipe.tags,
                     "protein_type": recipe.protein_type,
@@ -127,11 +127,13 @@ class ExportService:
         for entry in meal_plan.entries:
             recipe = recipe_map.get(entry.recipe_id) if entry.recipe_id else None
             
-            if recipe and recipe.ingredients:
-                lines.append(f"{recipe.title}:")
-                for ingredient in recipe.ingredients:
-                    lines.append(f"  - {ingredient}")
-                lines.append("")
+            if recipe:
+                ingredient_texts = recipe.get_all_ingredients_text()
+                if ingredient_texts:
+                    lines.append(f"{recipe.title}:")
+                    for ingredient in ingredient_texts:
+                        lines.append(f"  - {ingredient}")
+                    lines.append("")
         
         return "\n".join(lines)
     
@@ -148,8 +150,10 @@ class ExportService:
         for entry in meal_plan.entries:
             recipe = recipe_map.get(entry.recipe_id) if entry.recipe_id else None
             
-            if recipe and recipe.ingredients:
-                for ingredient in recipe.ingredients:
+            if recipe:
+                shopping_ingredients = recipe.get_ingredients_for_shopping_list()
+                
+                for ingredient in shopping_ingredients:
                     # Normalize ingredient for consolidation
                     normalized = self._normalize_ingredient(ingredient)
                     base_name = self._extract_base_ingredient(normalized)
@@ -192,8 +196,9 @@ class ExportService:
         for entry in meal_plan.entries:
             recipe = recipe_map.get(entry.recipe_id) if entry.recipe_id else None
             
-            if recipe and recipe.ingredients:
-                for ingredient in recipe.ingredients:
+            if recipe:
+                shopping_ingredients = recipe.get_ingredients_for_shopping_list()
+                for ingredient in shopping_ingredients:
                     # Normalize ingredient for consolidation
                     normalized = self._normalize_ingredient(ingredient)
                     base_name = self._extract_base_ingredient(normalized)
@@ -269,9 +274,10 @@ class ExportService:
                 # Build description with ingredients, steps, and URL
                 description_parts = []
                 
-                if recipe.ingredients:
+                ingredient_texts = recipe.get_all_ingredients_text()
+                if ingredient_texts:
                     description_parts.append("INGREDIENTS:")
-                    for ingredient in recipe.ingredients:
+                    for ingredient in ingredient_texts:
                         description_parts.append(f"- {ingredient}")
                     description_parts.append("")
                 
@@ -306,18 +312,53 @@ class ExportService:
     
     def _extract_base_ingredient(self, ingredient: str) -> str:
         """Extract the base ingredient name for consolidation"""
+        original = ingredient
+        
         # Remove common measurements and descriptors
-        # This is a simple version - could be made more sophisticated
-        ingredient = re.sub(r'^\d+\s*(cups?|tbsp|tsp|lbs?|oz|pounds?|ounces?|cloves?|cans?|packages?)\s+', '', ingredient)
-        ingredient = re.sub(r'\s*(large|small|medium|fresh|dried|chopped|diced|sliced|minced)\s*', ' ', ingredient)
+        # Remove measurements at the beginning
+        ingredient = re.sub(r'^\d+\s*(\d+/)?\d*\s*(cups?|tbsp|tsp|teaspoons?|tablespoons?|lbs?|pounds?|oz|ounces?|cloves?|cans?|packages?|ribs?)\s+', '', ingredient)
+        ingredient = re.sub(r'^(¼|½|¾|⅓|⅔|⅛|⅜|⅝|⅞)\s*(cups?|tbsp|tsp|teaspoons?|tablespoons?|lbs?|pounds?|oz|ounces?|cloves?|cans?|packages?|ribs?)\s+', '', ingredient)
+        
+        # Remove descriptors but be more careful
+        ingredient = re.sub(r'\s*(large|small|medium|extra)\s+', ' ', ingredient)
+        ingredient = re.sub(r'\s*(chopped|diced|sliced|minced|peeled)\s*', ' ', ingredient)
+        
+        # Clean up extra whitespace
         ingredient = re.sub(r'\s+', ' ', ingredient).strip()
         
-        # Take first few words as the base ingredient
+        # Remove parenthetical information
+        ingredient = re.sub(r'\s*\([^)]*\)\s*', ' ', ingredient).strip()
+        
+        # For very short ingredients or those that lost too much, return original
+        if len(ingredient.split()) == 0 or len(ingredient) < 3:
+            return original.lower()
+        
+        # For spices and seasonings, be more specific
         words = ingredient.split()
+        
+        # If we have specific spice/herb names, include more context
+        spice_herbs = ['thyme', 'rosemary', 'basil', 'oregano', 'parsley', 'cilantro', 'sage', 'salt', 'pepper']
+        for spice in spice_herbs:
+            if spice in ingredient.lower():
+                # For spices, include qualifying words like "dried", "fresh", "kosher", "black"
+                relevant_words = []
+                for word in words:
+                    if word.lower() in ['fresh', 'dried', 'kosher', 'black', 'white', 'ground'] or spice in word.lower():
+                        relevant_words.append(word)
+                if relevant_words:
+                    return ' '.join(relevant_words).lower()
+        
+        # For other ingredients, take first 2-3 words but be smarter
         if len(words) <= 2:
-            return ingredient
+            return ingredient.lower()
+        elif len(words) == 3:
+            # If third word is likely important (not just descriptor), keep it
+            if words[2].lower() not in ['leaves', 'powder', 'flakes', 'bits']:
+                return ' '.join(words).lower()
+            else:
+                return ' '.join(words[:2]).lower()
         else:
-            return ' '.join(words[:2])
+            return ' '.join(words[:2]).lower()
     
     def _fold_ics_line(self, line: str) -> List[str]:
         """Fold ICS lines to 75 characters as required by RFC 5545"""

@@ -3,10 +3,10 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
-import { ArrowLeft, Edit, Star, Clock, Users, ChefHat } from 'lucide-react';
+import { ArrowLeft, Edit, Star, Clock, Users, ChefHat, ShoppingCart, X } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { Recipe } from '../../lib/types';
-import { getProteinTypeColor, getTagColor, formatTime } from '../../lib/utils';
+import { getProteinTypeColor, getTagColor, formatTime, getIngredientText, getIngredientShoppingFlag } from '../../lib/utils';
 
 export function RecipeDetail() {
   const { id } = useParams();
@@ -214,12 +214,30 @@ export function RecipeDetail() {
           </CardHeader>
           <CardContent>
             <ul className="space-y-2">
-              {recipe.ingredients.map((ingredient, index) => (
-                <li key={index} className="flex items-start">
-                  <span className="inline-block w-2 h-2 rounded-full bg-gray-400 mt-2 mr-3 flex-shrink-0"></span>
-                  <span>{ingredient}</span>
-                </li>
-              ))}
+              {recipe.ingredients.map((ingredient, index) => {
+                const text = getIngredientText(ingredient);
+                const includeInShopping = getIngredientShoppingFlag(ingredient);
+                
+                return (
+                  <li key={index} className="flex items-start justify-between group">
+                    <div className="flex items-start">
+                      <span className="inline-block w-2 h-2 rounded-full bg-gray-400 mt-2 mr-3 flex-shrink-0"></span>
+                      <span className={!includeInShopping ? "line-through text-gray-500" : ""}>{text}</span>
+                    </div>
+                    <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {includeInShopping ? (
+                        <span title="Included in shopping list">
+                          <ShoppingCart className="h-4 w-4 text-green-600" />
+                        </span>
+                      ) : (
+                        <span title="Not included in shopping list">
+                          <X className="h-4 w-4 text-red-400" />
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </CardContent>
         </Card>

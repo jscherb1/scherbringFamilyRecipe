@@ -1,3 +1,8 @@
+export interface Ingredient {
+  text: string;
+  includeInShoppingList: boolean;
+}
+
 export type ProteinType = 
   | "beef"
   | "chicken" 
@@ -21,7 +26,7 @@ export interface Recipe {
   type: "Recipe";
   title: string;
   description?: string;
-  ingredients: string[];
+  ingredients: (Ingredient | string)[];  // Support both new and legacy formats
   steps: string[];
   tags: string[];
   proteinType?: ProteinType;
@@ -43,7 +48,7 @@ export interface Recipe {
 export interface RecipeCreate {
   title: string;
   description?: string;
-  ingredients: string[];
+  ingredients: (Ingredient | string)[];  // Support both new and legacy formats
   steps: string[];
   tags: string[];
   proteinType?: ProteinType;
@@ -65,7 +70,7 @@ export interface RecipeCreateBulk {
   description?: string;
   ingredientsText?: string;  // Bulk ingredients as text, separated by line breaks
   stepsText?: string;        // Bulk steps as text, separated by line breaks
-  ingredients?: string[];    // Individual ingredients list (alternative to ingredientsText)
+  ingredients?: (Ingredient | string)[];    // Individual ingredients list (alternative to ingredientsText)
   steps?: string[];          // Individual steps list (alternative to stepsText)
   tags: string[];
   proteinType?: ProteinType;
@@ -85,7 +90,7 @@ export interface RecipeCreateBulk {
 export interface RecipeUpdate {
   title?: string;
   description?: string;
-  ingredients?: string[];
+  ingredients?: (Ingredient | string)[];
   steps?: string[];
   tags?: string[];
   proteinType?: ProteinType;

@@ -1,8 +1,60 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { Ingredient } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+// Ingredient helper functions
+export function getIngredientText(ingredient: Ingredient | string): string {
+  return typeof ingredient === 'string' ? ingredient : ingredient.text;
+}
+
+export function getIngredientShoppingFlag(ingredient: Ingredient | string): boolean {
+  // Legacy string ingredients default to included for backward compatibility
+  return typeof ingredient === 'string' ? true : ingredient.includeInShoppingList;
+}
+
+export function createIngredientFromText(text: string, includeInShoppingList: boolean = true): Ingredient {
+  return {
+    text: text.trim(),
+    includeInShoppingList
+  };
+}
+
+export function normalizeIngredient(ingredient: Ingredient | string): Ingredient {
+  if (typeof ingredient === 'string') {
+    return createIngredientFromText(ingredient, true);
+  }
+  return ingredient;
+}
+
+export function normalizeIngredients(ingredients: (Ingredient | string)[]): Ingredient[] {
+  return ingredients.map(normalizeIngredient);
+}
+
+export function getIngredientsForShoppingList(ingredients: (Ingredient | string)[]): string[] {
+  return ingredients
+    .filter(ingredient => getIngredientShoppingFlag(ingredient))
+    .map(ingredient => getIngredientText(ingredient));
+}
+
+export function getAllIngredientTexts(ingredients: (Ingredient | string)[]): string[] {
+  return ingredients.map(ingredient => getIngredientText(ingredient));
+}
+
+export function filterValidIngredients(ingredients: (Ingredient | string)[]): (Ingredient | string)[] {
+  return ingredients.filter(ingredient => {
+    const text = getIngredientText(ingredient);
+    return text && text.trim().length > 0;
+  });
+}
+
+export function convertStringArrayToIngredients(strings: string[]): Ingredient[] {
+  return strings
+    .filter(s => s && s.trim().length > 0)
+    .map(s => createIngredientFromText(s.trim(), true));
 }
 
 export function formatDate(dateString: string): string {
@@ -82,12 +134,15 @@ export function cleanRecipeText(text: string): string {
 }
 
 /**
- * Convert an array of strings to bulk text (joined by line breaks)
- * @param items - Array of strings to join
+ * Convert an array of strings or ingredients to bulk text (joined by line breaks)
+ * @param items - Array of strings or ingredients to join
  * @returns Single string with items separated by newlines
  */
-export function arrayToBulkText(items: string[]): string {
-  return items.join('\n');
+export function arrayToBulkText(items: (string | Ingredient)[]): string {
+  const texts = items.map(item => 
+    typeof item === 'string' ? item : item.text
+  ).filter(text => text && text.trim().length > 0);
+  return texts.join('\n');
 }
 
 /**
