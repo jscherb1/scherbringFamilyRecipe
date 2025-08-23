@@ -696,8 +696,8 @@ function RecipeSelectionModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <Card className="w-full max-w-2xl max-h-[80vh] m-4">
-        <CardHeader>
+      <Card className="w-full max-w-2xl max-h-[80vh] m-4 flex flex-col">
+        <CardHeader className="flex-shrink-0">
           <div className="flex items-center justify-between">
             <CardTitle>Select a Recipe</CardTitle>
             <Button variant="ghost" size="sm" onClick={onClose}>
@@ -710,7 +710,7 @@ function RecipeSelectionModal({
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </CardHeader>
-        <CardContent className="overflow-y-auto">
+        <CardContent className="flex-1 overflow-y-auto min-h-0">
           <div className="space-y-2">
             {filteredRecipes.map((recipe) => (
               <div
