@@ -225,5 +225,75 @@ class RecipeRepository:
         
         logger.info(f"Updated last_cooked_at for {len(recipe_ids)} recipes")
 
+    async def remove_tag_from_all_recipes(self, tag: str) -> int:
+        """Remove a specific tag from all recipes that have it"""
+        container = self._get_container()
+        
+        logger.info(f"Attempting to remove tag '{tag}' from all recipes")
+        
+        # Query for all recipes that have the tag
+        query = f"""
+        SELECT c.id
+        FROM c 
+        WHERE c.type = 'Recipe' 
+        AND c.userId = @userId 
+        AND ARRAY_CONTAINS(c.tags, @tag)
+        """
+        
+        parameters = [
+            {"name": "@userId", "value": self.user_id},
+            {"name": "@tag", "value": tag}
+        ]
+        
+        recipes_to_update = list(container.query_items(
+            query=query,
+            parameters=parameters
+        ))
+        
+        logger.info(f"Found {len(recipes_to_update)} recipes with tag '{tag}'")
+        
+        updated_count = 0
+        
+        for recipe_data in recipes_to_update:
+            try:
+                recipe_id = recipe_data['id']
+                logger.debug(f"Processing recipe {recipe_id}")
+                
+                # Fetch the full recipe to ensure we have all data
+                full_recipe = await self.get_recipe(recipe_id)
+                if not full_recipe:
+                    logger.error(f"Could not fetch full recipe data for {recipe_id}")
+                    continue
+                
+                # Check if the tag is actually in the recipe
+                if tag not in full_recipe.tags:
+                    logger.warning(f"Tag '{tag}' not found in recipe {recipe_id}, skipping")
+                    continue
+                
+                # Remove the tag from the tags array
+                updated_tags = [t for t in full_recipe.tags if t != tag]
+                
+                logger.debug(f"Updated tags for recipe {recipe_id}: {full_recipe.tags} -> {updated_tags}")
+                
+                # Update the recipe tags
+                full_recipe.tags = updated_tags
+                full_recipe.updated_at = datetime.utcnow()
+                
+                # Use the full recipe data for the update
+                container.replace_item(
+                    item=recipe_id,
+                    body=full_recipe.model_dump()
+                )
+                
+                updated_count += 1
+                logger.info(f"Successfully removed tag '{tag}' from recipe {recipe_id}")
+                
+            except Exception as e:
+                logger.error(f"Error removing tag '{tag}' from recipe {recipe_data.get('id', 'unknown')}: {e}")
+                continue
+        
+        logger.info(f"Successfully removed tag '{tag}' from {updated_count} recipes")
+        return updated_count
+
 # Global instance
 recipe_repository = RecipeRepository()

@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Badge } from '../../components/ui/Badge';
 import { Checkbox } from '../../components/ui/Checkbox';
 import { ImageUpload } from '../../components/ui/ImageUpload';
+import { TagInput } from '../../components/ui/TagInput';
 import { Plus, X, Save, ArrowLeft, List, FileText, Link, ShoppingCart } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { RecipeCreate, RecipeCreateBulk, ProteinType, MealType, Ingredient } from '../../lib/types';
@@ -27,7 +28,7 @@ export function RecipeEdit() {
   const [ingredients, setIngredients] = useState<(Ingredient | string)[]>([createIngredientFromText('', true)]);
   const [steps, setSteps] = useState<string[]>(['']);
   const [tags, setTags] = useState<string[]>([]);
-  const [newTag, setNewTag] = useState('');
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [proteinType, setProteinType] = useState<ProteinType | ''>('');
   const [mealType, setMealType] = useState<MealType>('dinner');
   const [prepTimeMin, setPrepTimeMin] = useState<number | ''>('');
@@ -57,6 +58,26 @@ export function RecipeEdit() {
       loadRecipe(id);
     }
   }, [id, isEditing]);
+
+  useEffect(() => {
+    loadAvailableTags();
+  }, []);
+
+  const loadAvailableTags = async () => {
+    try {
+      const allTags = await apiClient.getTags();
+      setAvailableTags(allTags);
+    } catch (error) {
+      console.error('Failed to load available tags:', error);
+    }
+  };
+
+  const handleNewTagCreated = (newTag: string) => {
+    // Add the newly created tag to available tags
+    if (!availableTags.includes(newTag)) {
+      setAvailableTags([...availableTags, newTag]);
+    }
+  };
 
   const loadRecipe = async (recipeId: string) => {
     try {
@@ -414,17 +435,6 @@ export function RecipeEdit() {
     setSelectedImageFile(null);
     setCurrentImageUrl(undefined);
     setImageChanged(true);
-  };
-
-  const addTag = () => {
-    if (newTag.trim() && !tags.includes(newTag.trim())) {
-      setTags([...tags, newTag.trim()]);
-      setNewTag('');
-    }
-  };
-
-  const removeTag = (tagToRemove: string) => {
-    setTags(tags.filter(tag => tag !== tagToRemove));
   };
 
   // Functions to handle switching between individual and bulk modes
@@ -788,30 +798,33 @@ export function RecipeEdit() {
             <CardTitle>Tags</CardTitle>
             <CardDescription>Add tags to help categorize and search for this recipe</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex space-x-2">
-              <Input
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                placeholder="Add a tag"
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-              />
-              <Button type="button" onClick={addTag}>
-                Add Tag
-              </Button>
-            </div>
+          <CardContent>
+            <TagInput
+              tags={tags}
+              onTagsChange={setTags}
+              availableTags={availableTags}
+              onNewTagCreated={handleNewTagCreated}
+              placeholder="Type to search tags or create new..."
+              showSelectedTags={false}
+            />
             
+            {/* Selected tags display */}
             {tags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="flex items-center space-x-1">
-                    <span>{tag}</span>
-                    <X
-                      className="h-3 w-3 cursor-pointer"
-                      onClick={() => removeTag(tag)}
-                    />
-                  </Badge>
-                ))}
+              <div className="mt-4">
+                <label className="text-sm font-medium text-gray-700 mb-2 block">
+                  Selected Tags ({tags.length})
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((tag) => (
+                    <Badge key={tag} variant="secondary" className="flex items-center space-x-1">
+                      <span>{tag}</span>
+                      <X
+                        className="h-3 w-3 cursor-pointer hover:text-red-500"
+                        onClick={() => setTags(tags.filter(t => t !== tag))}
+                      />
+                    </Badge>
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>

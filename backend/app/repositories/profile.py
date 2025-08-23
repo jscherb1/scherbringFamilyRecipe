@@ -79,9 +79,20 @@ class ProfileRepository:
         return profile
     
     async def remove_tag_from_catalog(self, tag: str) -> UserProfile:
-        """Remove a tag from the catalog"""
+        """Remove a tag from the catalog and from all recipes that use it"""
+        from app.repositories.recipes import recipe_repository
+        
         profile = await self.get_profile()
         
+        # Always try to remove from recipes first (regardless of catalog state)
+        try:
+            removed_count = await recipe_repository.remove_tag_from_all_recipes(tag)
+            logger.info(f"Removed tag '{tag}' from {removed_count} recipes")
+        except Exception as e:
+            logger.error(f"Error removing tag '{tag}' from recipes: {e}")
+            # Continue even if recipe update fails
+        
+        # Remove tag from catalog if it exists there
         if tag in profile.tag_catalog:
             profile.tag_catalog.remove(tag)
             profile.updated_at = datetime.utcnow()
@@ -94,6 +105,8 @@ class ProfileRepository:
             
             logger.info(f"Removed tag '{tag}' from catalog")
             return UserProfile.from_cosmos_data(updated_item)
+        else:
+            logger.info(f"Tag '{tag}' was not in catalog, but attempted to remove from recipes")
         
         return profile
 

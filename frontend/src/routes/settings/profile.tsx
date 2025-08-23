@@ -21,10 +21,28 @@ export function ProfileSettings() {
   const [defaultDinnersPerWeek, setDefaultDinnersPerWeek] = useState(5);
   const [startWeekOn, setStartWeekOn] = useState<'monday' | 'sunday'>('monday');
   const [timezone, setTimezone] = useState('');
+  const [tagCatalog, setTagCatalog] = useState<string[]>([]);
+  const [allRecipeTags, setAllRecipeTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState('');
+  const [deletingTag, setDeletingTag] = useState<string | null>(null);
+  const [loadingTags, setLoadingTags] = useState(false);
 
   useEffect(() => {
     loadProfile();
+    loadRecipeTags();
   }, []);
+
+  const loadRecipeTags = async () => {
+    try {
+      setLoadingTags(true);
+      const tags = await apiClient.getTags();
+      setAllRecipeTags(tags);
+    } catch (error) {
+      console.error('Failed to load recipe tags:', error);
+    } finally {
+      setLoadingTags(false);
+    }
+  };
 
   const loadProfile = async () => {
     try {
@@ -38,6 +56,7 @@ export function ProfileSettings() {
       setDefaultDinnersPerWeek(userProfile.defaultDinnersPerWeek);
       setStartWeekOn(userProfile.startWeekOn);
       setTimezone(userProfile.timezone);
+      setTagCatalog(userProfile.tagCatalog || []);
     } catch (error) {
       console.error('Failed to load profile:', error);
       // If profile doesn't exist, we'll create one when saving
@@ -56,6 +75,7 @@ export function ProfileSettings() {
       defaultDinnersPerWeek,
       startWeekOn,
       timezone: timezone.trim() || 'UTC',
+      tagCatalog,
     };
 
     try {
@@ -102,6 +122,36 @@ export function ProfileSettings() {
 
   const removeDislike = (dislike: string) => {
     setDislikes(dislikes.filter(item => item !== dislike));
+  };
+
+  const addTag = async () => {
+    if (newTag.trim() && !allRecipeTags.includes(newTag.trim())) {
+      try {
+        await apiClient.addTagToCatalog(newTag.trim());
+        // Reload tags to get updated list
+        await loadRecipeTags();
+        setNewTag('');
+      } catch (error) {
+        console.error('Failed to add tag:', error);
+        alert('Failed to add tag');
+      }
+    }
+  };
+
+  const removeTag = async (tag: string) => {
+    if (confirm(`Are you sure you want to remove the tag "${tag}"? This will also remove it from all recipes that use it.`)) {
+      try {
+        setDeletingTag(tag);
+        await apiClient.removeTagFromCatalog(tag);
+        // Reload tags to get updated list
+        await loadRecipeTags();
+      } catch (error) {
+        console.error('Failed to remove tag:', error);
+        alert('Failed to remove tag');
+      } finally {
+        setDeletingTag(null);
+      }
+    }
   };
 
   if (loading) {
@@ -276,6 +326,77 @@ export function ProfileSettings() {
                 className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
                 rows={6}
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Tag Management */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Recipe Tag Management</CardTitle>
+            <CardDescription>
+              Manage the tags available for your recipes. Removing a tag will also remove it from all recipes that use it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Add new tag */}
+              <div>
+                <label className="text-sm font-medium">Add New Tag</label>
+                <p className="text-xs text-muted-foreground mt-1 mb-2">
+                  Add a new tag that can be used when creating or editing recipes.
+                </p>
+                <div className="flex space-x-2">
+                  <Input
+                    value={newTag}
+                    onChange={(e) => setNewTag(e.target.value)}
+                    placeholder="Enter tag name"
+                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                  />
+                  <Button type="button" onClick={addTag} disabled={!newTag.trim() || allRecipeTags.includes(newTag.trim())}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {newTag.trim() && allRecipeTags.includes(newTag.trim()) && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    This tag already exists in your recipes.
+                  </p>
+                )}
+              </div>
+
+              {/* Current tags */}
+              <div>
+                <label className="text-sm font-medium">
+                  Current Recipe Tags ({allRecipeTags.length})
+                </label>
+                <p className="text-xs text-muted-foreground mt-1 mb-3">
+                  These are all the tags currently used in your recipes. Click the X to remove a tag from all recipes.
+                </p>
+                {loadingTags ? (
+                  <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                    <span>Loading tags...</span>
+                  </div>
+                ) : allRecipeTags.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {allRecipeTags.map((tag) => (
+                      <Badge key={tag} variant="outline" className="flex items-center space-x-1">
+                        <span>{tag}</span>
+                        <X
+                          className={`h-3 w-3 cursor-pointer hover:text-red-500 ${
+                            deletingTag === tag ? 'animate-pulse' : ''
+                          }`}
+                          onClick={() => removeTag(tag)}
+                        />
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">
+                    No tags found in your recipes. Create some recipes with tags to see them here.
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
