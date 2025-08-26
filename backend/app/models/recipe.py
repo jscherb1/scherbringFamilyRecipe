@@ -435,3 +435,34 @@ class RecipeUrlParseResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message if parsing failed")
     
     model_config = ConfigDict(populate_by_name=True)
+
+
+class RecipeAIGenerateRequest(BaseModel):
+    """Request model for AI recipe generation"""
+    prompt: str = Field(..., min_length=1, max_length=500, description="User prompt describing the desired recipe")
+
+
+class RecipeAIGeneratePartRequest(BaseModel):
+    """Request model for AI recipe part generation (description, ingredients, instructions)"""
+    title: str = Field(..., min_length=1, max_length=200, description="Recipe title")
+    existing_description: Optional[str] = Field("", description="Existing description text")
+    existing_ingredients: Optional[str] = Field("", description="Existing ingredients text")
+    existing_instructions: Optional[str] = Field("", description="Existing instructions text")
+
+
+class RecipeAIGeneratePartResponse(BaseModel):
+    """Response model for AI-generated recipe part"""
+    success: bool = Field(..., description="Whether generation was successful")
+    generated_text: Optional[str] = Field(None, alias="generatedText", description="Generated text if successful")
+    error: Optional[str] = Field(None, description="Error message if generation failed")
+    
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class RecipeAIGenerateResponse(BaseModel):
+    """Response model for AI-generated recipe"""
+    success: bool = Field(..., description="Whether generation was successful")
+    recipe_data: Optional[RecipeCreateBulk] = Field(None, alias="recipeData", description="Generated recipe data if successful")
+    error: Optional[str] = Field(None, description="Error message if generation failed")
+    
+    model_config = ConfigDict(populate_by_name=True)

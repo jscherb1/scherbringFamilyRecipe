@@ -319,6 +319,53 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+
+  // AI Recipe Generation
+  async generateRecipeWithAI(prompt: string): Promise<{ success: boolean; recipeData?: any; error?: string }> {
+    return this.request<{ success: boolean; recipeData?: any; error?: string }>('/api/recipes/generate-ai', {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
+    });
+  }
+
+  async generateRecipeDescriptionWithAI(title: string, existingIngredients?: string, existingInstructions?: string): Promise<{ success: boolean; generatedText?: string; error?: string }> {
+    return this.request<{ success: boolean; generatedText?: string; error?: string }>('/api/recipes/generate-ai-description', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        title,
+        existing_ingredients: existingIngredients || "",
+        existing_instructions: existingInstructions || ""
+      }),
+    });
+  }
+
+  async generateRecipeIngredientsWithAI(title: string, existingDescription?: string, existingInstructions?: string): Promise<{ success: boolean; generatedText?: string; error?: string }> {
+    return this.request<{ success: boolean; generatedText?: string; error?: string }>('/api/recipes/generate-ai-ingredients', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        title,
+        existing_description: existingDescription || "",
+        existing_instructions: existingInstructions || ""
+      }),
+    });
+  }
+
+  async generateRecipeInstructionsWithAI(title: string, existingDescription?: string, existingIngredients?: string): Promise<{ success: boolean; generatedText?: string; error?: string }> {
+    return this.request<{ success: boolean; generatedText?: string; error?: string }>('/api/recipes/generate-ai-instructions', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        title,
+        existing_description: existingDescription || "",
+        existing_ingredients: existingIngredients || ""
+      }),
+    });
+  }
+
+  async generateRandomRecipeWithAI(): Promise<{ success: boolean; recipeData?: any; error?: string }> {
+    return this.request<{ success: boolean; recipeData?: any; error?: string }>('/api/recipes/generate-ai-random', {
+      method: 'POST',
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

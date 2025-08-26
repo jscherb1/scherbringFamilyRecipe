@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     cosmos_key: str = ""
     cosmos_db_name: str = "RecipeApp"
     
+    # Azure AI Foundry settings
+    azure_ai_endpoint: str = ""
+    azure_ai_api_key: str = ""
+    azure_ai_api_version: str = "2024-02-01"
+    azure_ai_deployment_name: str = ""
+    
     # Feature flags
     feature_ai: bool = False
     feature_import: bool = False
@@ -32,6 +38,12 @@ class Settings(BaseSettings):
         self.cosmos_endpoint = os.getenv("COSMOS_ENDPOINT", "")
         self.cosmos_key = os.getenv("COSMOS_KEY", "")
         self.cosmos_db_name = os.getenv("COSMOS_DB_NAME", "RecipeApp")
+        
+        # Azure AI Foundry settings
+        self.azure_ai_endpoint = os.getenv("AZURE_AI_ENDPOINT", "")
+        self.azure_ai_api_key = os.getenv("AZURE_AI_API_KEY", "")
+        self.azure_ai_api_version = os.getenv("AZURE_AI_API_VERSION", "2024-02-01")
+        self.azure_ai_deployment_name = os.getenv("AZURE_AI_DEPLOYMENT_NAME", "")
         
         # Feature flags
         self.feature_ai = os.getenv("FEATURE_AI", "false").lower() == "true"

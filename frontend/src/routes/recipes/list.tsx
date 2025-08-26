@@ -1,15 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
-import { Plus, Search, Filter, Star, Clock, Users, Edit, Trash2 } from 'lucide-react';
+import { AIRecipeDialog } from '../../components/ui/AIRecipeDialog';
+import { Plus, Search, Filter, Star, Clock, Users, Edit, Trash2, Sparkles } from 'lucide-react';
 import { apiClient } from '../../lib/api';
-import { Recipe, ProteinType } from '../../lib/types';
+import { Recipe, ProteinType, RecipeCreateBulk } from '../../lib/types';
 import { getProteinTypeColor, getTagColor, formatTime } from '../../lib/utils';
 
 export function RecipeList() {
+  const navigate = useNavigate();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -20,6 +22,10 @@ export function RecipeList() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [totalRecipes, setTotalRecipes] = useState(0);
+  
+  // AI Recipe Generation state
+  const [showAIDialog, setShowAIDialog] = useState(false);
+  const [aiGenerationLoading, setAiGenerationLoading] = useState(false);
 
   const loadRecipes = async (resetList = true) => {
     try {
@@ -115,6 +121,42 @@ export function RecipeList() {
     }
   };
 
+  const handleAIGeneration = async (request: { type: 'prompt' | 'random'; prompt?: string }) => {
+    try {
+      setAiGenerationLoading(true);
+      
+      let response;
+      if (request.type === 'random') {
+        response = await apiClient.generateRandomRecipeWithAI();
+      } else if (request.prompt) {
+        response = await apiClient.generateRecipeWithAI(request.prompt);
+      } else {
+        throw new Error('Invalid generation request');
+      }
+      
+      if (response.success && response.recipeData) {
+        // Close the dialog
+        setShowAIDialog(false);
+        
+        // Navigate to recipe edit page with the generated data
+        // We'll pass the data through navigation state
+        navigate('/recipes/new', { 
+          state: { 
+            aiGeneratedData: response.recipeData,
+            isAIGenerated: true 
+          } 
+        });
+      } else {
+        throw new Error(response.error || 'Failed to generate recipe');
+      }
+    } catch (error) {
+      console.error('AI generation error:', error);
+      alert(`Failed to generate recipe: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setAiGenerationLoading(false);
+    }
+  };
+
   const renderStars = (rating?: number) => {
     if (!rating) return null;
     
@@ -154,8 +196,12 @@ export function RecipeList() {
           <p className="text-muted-foreground">Manage your personal recipe collection</p>
         </div>
         <div className="flex space-x-2">
-          <Button disabled className="opacity-50" variant="outline">
-            <span className="mr-2">✨</span>
+          <Button 
+            variant="outline"
+            onClick={() => setShowAIDialog(true)}
+            disabled={aiGenerationLoading}
+          >
+            <Sparkles className="mr-2 h-4 w-4" />
             Generate w/ AI
           </Button>
           <Link to="/recipes/new">
@@ -386,6 +432,14 @@ export function RecipeList() {
           </p>
         </div>
       )}
+
+      {/* AI Recipe Generation Dialog */}
+      <AIRecipeDialog
+        open={showAIDialog}
+        onClose={() => setShowAIDialog(false)}
+        onRecipeGenerated={handleAIGeneration}
+        loading={aiGenerationLoading}
+      />
     </div>
   );
 }

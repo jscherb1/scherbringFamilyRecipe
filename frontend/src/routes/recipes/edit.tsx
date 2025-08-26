@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Textarea } from '../../components/ui/Textarea';
@@ -8,7 +8,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Checkbox } from '../../components/ui/Checkbox';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { TagInput } from '../../components/ui/TagInput';
-import { Plus, X, Save, ArrowLeft, List, FileText, Link, ShoppingCart } from 'lucide-react';
+import { Plus, X, Save, ArrowLeft, List, FileText, Link, ShoppingCart, Sparkles, Bot } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { RecipeCreate, RecipeCreateBulk, ProteinType, MealType, Ingredient } from '../../lib/types';
 import { parseBulkText, arrayToBulkText, getIngredientText, getIngredientShoppingFlag, createIngredientFromText, normalizeIngredients, filterValidIngredients } from '../../lib/utils';
@@ -17,7 +17,12 @@ import { UrlImportDialog } from '../../components/ui/UrlImportDialog';
 export function RecipeEdit() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const isEditing = Boolean(id);
+  
+  // Check if we have AI-generated data
+  const aiGeneratedData = location.state?.aiGeneratedData;
+  const isAIGenerated = location.state?.isAIGenerated;
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -53,6 +58,13 @@ export function RecipeEdit() {
   const [showUrlImportDialog, setShowUrlImportDialog] = useState(false);
   const [urlImportLoading, setUrlImportLoading] = useState(false);
 
+  // AI generation state
+  const [aiGenerating, setAiGenerating] = useState({
+    description: false,
+    ingredients: false,
+    instructions: false
+  });
+
   useEffect(() => {
     if (isEditing && id) {
       loadRecipe(id);
@@ -62,6 +74,13 @@ export function RecipeEdit() {
   useEffect(() => {
     loadAvailableTags();
   }, []);
+
+  // Handle AI-generated data
+  useEffect(() => {
+    if (aiGeneratedData && !isEditing) {
+      populateFormWithAIData(aiGeneratedData);
+    }
+  }, [aiGeneratedData, isEditing]);
 
   const loadAvailableTags = async () => {
     try {
@@ -76,6 +95,53 @@ export function RecipeEdit() {
     // Add the newly created tag to available tags
     if (!availableTags.includes(newTag)) {
       setAvailableTags([...availableTags, newTag]);
+    }
+  };
+
+  const populateFormWithAIData = (data: RecipeCreateBulk) => {
+    try {
+      // Populate basic fields
+      setTitle(data.title || '');
+      setDescription(data.description || '');
+      
+      // Handle tags
+      if (data.tags && data.tags.length > 0) {
+        setTags(data.tags);
+      }
+      
+      // Handle metadata
+      setProteinType(data.proteinType || '');
+      setMealType(data.mealType || 'dinner');
+      setPrepTimeMin(data.prepTimeMin || '');
+      setCookTimeMin(data.cookTimeMin || '');
+      setServings(data.servings || '');
+      setNotes(data.notes || '');
+      
+      // Handle ingredients - start in bulk mode with AI-generated text
+      if (data.ingredientsText) {
+        setIngredientsBulkText(data.ingredientsText);
+        setIngredientsBulkMode(true);
+      } else if (data.ingredients && data.ingredients.length > 0) {
+        // Convert to bulk text format
+        const ingredientTexts = data.ingredients.map(ing => 
+          typeof ing === 'string' ? ing : ing.text
+        );
+        setIngredientsBulkText(ingredientTexts.join('\n'));
+        setIngredientsBulkMode(true);
+      }
+      
+      // Handle steps - start in bulk mode with AI-generated text
+      if (data.stepsText) {
+        setStepsBulkText(data.stepsText);
+        setStepsBulkMode(true);
+      } else if (data.steps && data.steps.length > 0) {
+        setStepsBulkText(data.steps.join('\n'));
+        setStepsBulkMode(true);
+      }
+      
+      console.log('Populated form with AI-generated recipe data');
+    } catch (error) {
+      console.error('Error populating form with AI data:', error);
     }
   };
 
@@ -469,6 +535,111 @@ export function RecipeEdit() {
     setStepsBulkMode(false);
   };
 
+  // AI Generation functions
+  const handleGenerateDescription = async () => {
+    if (!title.trim()) {
+      alert('Please enter a recipe title first');
+      return;
+    }
+
+    try {
+      setAiGenerating(prev => ({ ...prev, description: true }));
+      
+      const existingIngredients = ingredientsBulkMode ? ingredientsBulkText : ingredients.map(getIngredientText).join('\n');
+      const existingInstructions = stepsBulkMode ? stepsBulkText : steps.join('\n');
+      
+      const response = await apiClient.generateRecipeDescriptionWithAI(
+        title.trim(),
+        existingIngredients,
+        existingInstructions
+      );
+      
+      if (response.success && response.generatedText) {
+        setDescription(response.generatedText);
+      } else {
+        alert(response.error || 'Failed to generate description');
+      }
+    } catch (error) {
+      console.error('Error generating description:', error);
+      alert('Failed to generate description');
+    } finally {
+      setAiGenerating(prev => ({ ...prev, description: false }));
+    }
+  };
+
+  const handleGenerateIngredients = async () => {
+    if (!title.trim()) {
+      alert('Please enter a recipe title first');
+      return;
+    }
+
+    try {
+      setAiGenerating(prev => ({ ...prev, ingredients: true }));
+      
+      const existingInstructions = stepsBulkMode ? stepsBulkText : steps.join('\n');
+      
+      const response = await apiClient.generateRecipeIngredientsWithAI(
+        title.trim(),
+        description,
+        existingInstructions
+      );
+      
+      if (response.success && response.generatedText) {
+        if (ingredientsBulkMode) {
+          setIngredientsBulkText(response.generatedText);
+        } else {
+          // Convert to individual ingredient objects
+          const ingredientLines = response.generatedText.split('\n').filter(line => line.trim());
+          const ingredientObjects = ingredientLines.map(line => createIngredientFromText(line, true));
+          setIngredients(ingredientObjects);
+        }
+      } else {
+        alert(response.error || 'Failed to generate ingredients');
+      }
+    } catch (error) {
+      console.error('Error generating ingredients:', error);
+      alert('Failed to generate ingredients');
+    } finally {
+      setAiGenerating(prev => ({ ...prev, ingredients: false }));
+    }
+  };
+
+  const handleGenerateInstructions = async () => {
+    if (!title.trim()) {
+      alert('Please enter a recipe title first');
+      return;
+    }
+
+    try {
+      setAiGenerating(prev => ({ ...prev, instructions: true }));
+      
+      const existingIngredients = ingredientsBulkMode ? ingredientsBulkText : ingredients.map(getIngredientText).join('\n');
+      
+      const response = await apiClient.generateRecipeInstructionsWithAI(
+        title.trim(),
+        description,
+        existingIngredients
+      );
+      
+      if (response.success && response.generatedText) {
+        if (stepsBulkMode) {
+          setStepsBulkText(response.generatedText);
+        } else {
+          // Convert to individual steps
+          const stepLines = response.generatedText.split('\n').filter(line => line.trim());
+          setSteps(stepLines);
+        }
+      } else {
+        alert(response.error || 'Failed to generate instructions');
+      }
+    } catch (error) {
+      console.error('Error generating instructions:', error);
+      alert('Failed to generate instructions');
+    } finally {
+      setAiGenerating(prev => ({ ...prev, instructions: false }));
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -490,11 +661,24 @@ export function RecipeEdit() {
             Back to Recipes
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">
-              {isEditing ? 'Edit Recipe' : 'New Recipe'}
-            </h1>
+            <div className="flex items-center space-x-2">
+              <h1 className="text-3xl font-bold">
+                {isEditing ? 'Edit Recipe' : 'New Recipe'}
+              </h1>
+              {isAIGenerated && (
+                <Badge variant="outline" className="text-purple-600 border-purple-600">
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  AI Generated
+                </Badge>
+              )}
+            </div>
             <p className="text-muted-foreground">
-              {isEditing ? 'Update your recipe details' : 'Create a new recipe for your collection'}
+              {isEditing 
+                ? 'Update your recipe details' 
+                : isAIGenerated 
+                  ? 'Review and customize your AI-generated recipe'
+                  : 'Create a new recipe for your collection'
+              }
             </p>
           </div>
         </div>
@@ -532,7 +716,20 @@ export function RecipeEdit() {
             </div>
             
             <div>
-              <label className="text-sm font-medium">Description</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium">Description</label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateDescription}
+                  disabled={!title.trim() || aiGenerating.description || saving}
+                  className="text-purple-600 border-purple-600 hover:bg-purple-50"
+                >
+                  <Bot className="h-3 w-3 mr-1" />
+                  {aiGenerating.description ? 'Generating...' : 'AI Generate'}
+                </Button>
+              </div>
               <Textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -644,6 +841,17 @@ export function RecipeEdit() {
               <div className="flex space-x-2">
                 <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateIngredients}
+                  disabled={!title.trim() || aiGenerating.ingredients || saving}
+                  className="text-purple-600 border-purple-600 hover:bg-purple-50"
+                >
+                  <Bot className="h-3 w-3 mr-1" />
+                  {aiGenerating.ingredients ? 'Generating...' : 'AI Generate'}
+                </Button>
+                <Button
+                  type="button"
                   variant={ingredientsBulkMode ? "outline" : "default"}
                   size="sm"
                   onClick={ingredientsBulkMode ? switchToIngredientsIndividualMode : switchToIngredientsBulkMode}
@@ -728,6 +936,17 @@ export function RecipeEdit() {
                 <CardDescription>Step-by-step cooking instructions</CardDescription>
               </div>
               <div className="flex space-x-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateInstructions}
+                  disabled={!title.trim() || aiGenerating.instructions || saving}
+                  className="text-purple-600 border-purple-600 hover:bg-purple-50"
+                >
+                  <Bot className="h-3 w-3 mr-1" />
+                  {aiGenerating.instructions ? 'Generating...' : 'AI Generate'}
+                </Button>
                 <Button
                   type="button"
                   variant={stepsBulkMode ? "outline" : "default"}
