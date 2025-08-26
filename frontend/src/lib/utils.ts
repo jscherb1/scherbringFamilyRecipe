@@ -221,3 +221,64 @@ export function formatDateForInput(date: Date): string {
 export function parseDate(dateString: string): Date {
   return new Date(dateString);
 }
+
+// Recipe AI image generation helpers
+export function isRecipeReadyForAIImageGeneration(
+  title: string,
+  description: string,
+  ingredients: (Ingredient | string)[],
+  steps: string[]
+): boolean {
+  // Check if all required fields are populated
+  const hasTitle = title && title.trim().length > 0;
+  const hasDescription = description && description.trim().length > 0;
+  const hasValidIngredients = ingredients && ingredients.length > 0 && 
+    ingredients.some(ing => getIngredientText(ing).trim().length > 0);
+  const hasValidSteps = steps && steps.length > 0 && 
+    steps.some(step => step.trim().length > 0);
+
+  return hasTitle && hasDescription && hasValidIngredients && hasValidSteps;
+}
+
+export function getAIImageGenerationDisabledReason(
+  title: string,
+  description: string,
+  ingredients: (Ingredient | string)[],
+  steps: string[]
+): string | null {
+  if (!title || title.trim().length === 0) {
+    return "Recipe title is required for AI image generation";
+  }
+  
+  if (!description || description.trim().length === 0) {
+    return "Recipe description is required for AI image generation";
+  }
+  
+  if (!ingredients || ingredients.length === 0 || !ingredients.some(ing => getIngredientText(ing).trim().length > 0)) {
+    return "At least one ingredient is required for AI image generation";
+  }
+  
+  if (!steps || steps.length === 0 || !steps.some(step => step.trim().length > 0)) {
+    return "At least one recipe step is required for AI image generation";
+  }
+  
+  return null; // All requirements met
+}
+
+export function prepareAIImageGenerationRequest(
+  title: string,
+  description: string,
+  ingredients: (Ingredient | string)[],
+  steps: string[]
+): { title: string; description: string; ingredients: string[]; steps: string[] } {
+  return {
+    title: title.trim(),
+    description: description.trim(),
+    ingredients: ingredients
+      .map(ing => getIngredientText(ing).trim())
+      .filter(text => text.length > 0),
+    steps: steps
+      .map(step => step.trim())
+      .filter(text => text.length > 0)
+  };
+}
