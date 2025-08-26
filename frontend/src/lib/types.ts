@@ -216,3 +216,17 @@ export interface RecipeUrlParseResponse {
   recipeData?: RecipeCreateBulk;
   error?: string;
 }
+
+export interface RecipeAIImageGenerateRequest {
+  title: string;
+  description: string;
+  ingredients: string[];
+  steps: string[];
+}
+
+export interface RecipeAIImageGenerateResponse {
+  success: boolean;
+  imageUrl?: string;
+  thumbnailUrl?: string;
+  error?: string;
+}

@@ -4,7 +4,7 @@ import uuid
 import logging
 from azure.cosmos.exceptions import CosmosResourceNotFoundError
 from app.repositories.cosmos_client import cosmos_client
-from app.models.recipe import Recipe, RecipeCreate, RecipeUpdate
+from app.models.recipe import Recipe, RecipeCreate, RecipeUpdate, Ingredient
 
 logger = logging.getLogger(__name__)
 
@@ -136,8 +136,24 @@ class RecipeRepository:
             logger.error(f"Recipe {recipe_id} not found for update")
             return None
         
+        # Ensure ingredients are properly normalized before updating
+        existing.normalize_ingredients()
+        
         # Update fields - use by_alias=False to get original field names
         update_data = recipe_data.model_dump(exclude_unset=True, by_alias=False)
+        
+        # Handle ingredients in update_data if present
+        if 'ingredients' in update_data and update_data['ingredients'] is not None:
+            normalized_update_ingredients = []
+            for ingredient in update_data['ingredients']:
+                if isinstance(ingredient, dict):
+                    normalized_update_ingredients.append(Ingredient(**ingredient))
+                elif isinstance(ingredient, str):
+                    normalized_update_ingredients.append(Ingredient(text=ingredient, includeInShoppingList=True))
+                else:
+                    normalized_update_ingredients.append(ingredient)
+            update_data['ingredients'] = normalized_update_ingredients
+        
         for field, value in update_data.items():
             setattr(existing, field, value)
         

@@ -7,6 +7,8 @@ import {
   RecipeListResponse,
   RecipeUrlParseRequest,
   RecipeUrlParseResponse,
+  RecipeAIImageGenerateRequest,
+  RecipeAIImageGenerateResponse,
   MealPlan,
   MealPlanGenerate,
   MealPlanGenerateResponse,
@@ -364,6 +366,13 @@ class ApiClient {
   async generateRandomRecipeWithAI(): Promise<{ success: boolean; recipeData?: any; error?: string }> {
     return this.request<{ success: boolean; recipeData?: any; error?: string }>('/api/recipes/generate-ai-random', {
       method: 'POST',
+    });
+  }
+
+  async generateRecipeImage(request: RecipeAIImageGenerateRequest): Promise<RecipeAIImageGenerateResponse> {
+    return this.request<RecipeAIImageGenerateResponse>('/api/recipes/ai/generate-image', {
+      method: 'POST',
+      body: JSON.stringify(request),
     });
   }
 }

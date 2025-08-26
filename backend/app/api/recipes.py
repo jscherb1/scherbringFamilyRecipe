@@ -2,11 +2,12 @@ from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, 
 from typing import List, Optional
 import logging
 import json
-from app.models.recipe import Recipe, RecipeCreate, RecipeCreateBulk, RecipeUpdate, RecipeUpdateBulk, ProteinType, MealType, RecipeUrlParseRequest, RecipeUrlParseResponse, RecipeAIGenerateRequest, RecipeAIGenerateResponse, RecipeAIGeneratePartRequest, RecipeAIGeneratePartResponse
+from app.models.recipe import Recipe, RecipeCreate, RecipeCreateBulk, RecipeUpdate, RecipeUpdateBulk, ProteinType, MealType, RecipeUrlParseRequest, RecipeUrlParseResponse, RecipeAIGenerateRequest, RecipeAIGenerateResponse, RecipeAIGeneratePartRequest, RecipeAIGeneratePartResponse, RecipeAIImageGenerateRequest, RecipeAIImageGenerateResponse
 from app.repositories.recipes import RecipeRepository
 from app.services.storage import storage_service
 from app.services.url_parser import url_parsing_service
 from app.services.ai_recipe_generator import ai_recipe_service
+from app.services.ai_image_generator import ai_image_service
 from app.deps import get_recipe_repository
 
 logger = logging.getLogger(__name__)
@@ -696,4 +697,47 @@ async def generate_random_recipe_with_ai():
         return RecipeAIGenerateResponse(
             success=False,
             error=f"Failed to generate random recipe: {str(e)}"
+        )
+
+
+@router.post("/ai/generate-image", response_model=RecipeAIImageGenerateResponse)
+async def generate_recipe_image(request: RecipeAIImageGenerateRequest):
+    """Generate an AI image for a recipe using DALL-E-3"""
+    
+    if not ai_image_service.is_available():
+        return RecipeAIImageGenerateResponse(
+            success=False,
+            error="AI image generation service is not available. Please check Azure AI and storage configuration."
+        )
+    
+    try:
+        logger.info(f"Generating AI image for recipe: {request.title}")
+        
+        # Generate image using the AI service
+        image_url, thumbnail_url = await ai_image_service.generate_recipe_image(
+            title=request.title,
+            description=request.description,
+            ingredients=request.ingredients,
+            steps=request.steps
+        )
+        
+        logger.info(f"Successfully generated AI image for recipe: {request.title}")
+        
+        return RecipeAIImageGenerateResponse(
+            success=True,
+            image_url=image_url,
+            thumbnail_url=thumbnail_url
+        )
+        
+    except ValueError as e:
+        logger.error(f"AI image generation validation error: {e}")
+        return RecipeAIImageGenerateResponse(
+            success=False,
+            error=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error generating AI image for recipe '{request.title}': {e}")
+        return RecipeAIImageGenerateResponse(
+            success=False,
+            error=f"Failed to generate image: {str(e)}"
         )

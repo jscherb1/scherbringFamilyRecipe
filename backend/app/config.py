@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     azure_ai_api_key: str = ""
     azure_ai_api_version: str = "2024-02-01"
     azure_ai_deployment_name: str = ""
+    azure_ai_dalle_deployment_name: str = ""
     
     # Feature flags
     feature_ai: bool = False
@@ -44,6 +45,7 @@ class Settings(BaseSettings):
         self.azure_ai_api_key = os.getenv("AZURE_AI_API_KEY", "")
         self.azure_ai_api_version = os.getenv("AZURE_AI_API_VERSION", "2024-02-01")
         self.azure_ai_deployment_name = os.getenv("AZURE_AI_DEPLOYMENT_NAME", "")
+        self.azure_ai_dalle_deployment_name = os.getenv("AZURE_AI_DALLE_DEPLOYMENT_NAME", "")
         
         # Feature flags
         self.feature_ai = os.getenv("FEATURE_AI", "false").lower() == "true"

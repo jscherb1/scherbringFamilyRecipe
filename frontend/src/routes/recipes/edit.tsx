@@ -11,7 +11,7 @@ import { TagInput } from '../../components/ui/TagInput';
 import { Plus, X, Save, ArrowLeft, List, FileText, Link, ShoppingCart, Sparkles, Bot } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { RecipeCreate, RecipeCreateBulk, ProteinType, MealType, Ingredient } from '../../lib/types';
-import { parseBulkText, arrayToBulkText, getIngredientText, getIngredientShoppingFlag, createIngredientFromText, normalizeIngredients, filterValidIngredients } from '../../lib/utils';
+import { parseBulkText, arrayToBulkText, getIngredientText, getIngredientShoppingFlag, createIngredientFromText, normalizeIngredients, filterValidIngredients, isRecipeReadyForAIImageGeneration, getAIImageGenerationDisabledReason, prepareAIImageGenerationRequest } from '../../lib/utils';
 import { UrlImportDialog } from '../../components/ui/UrlImportDialog';
 
 export function RecipeEdit() {
@@ -51,6 +51,7 @@ export function RecipeEdit() {
   
   // Image state
   const [currentImageUrl, setCurrentImageUrl] = useState<string | undefined>();
+  const [currentThumbnailUrl, setCurrentThumbnailUrl] = useState<string | undefined>();
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [imageChanged, setImageChanged] = useState(false);
 
@@ -62,7 +63,8 @@ export function RecipeEdit() {
   const [aiGenerating, setAiGenerating] = useState({
     description: false,
     ingredients: false,
-    instructions: false
+    instructions: false,
+    image: false
   });
 
   useEffect(() => {
@@ -169,6 +171,7 @@ export function RecipeEdit() {
       setSourceUrl(recipe.sourceUrl || '');
       setNotes(recipe.notes || '');
       setCurrentImageUrl(recipe.imageUrl);
+      setCurrentThumbnailUrl(recipe.thumbnailUrl);
     } catch (error) {
       console.error('Failed to load recipe:', error);
       alert('Failed to load recipe');
@@ -205,6 +208,8 @@ export function RecipeEdit() {
             rating: rating ? Number(rating) : undefined,
             sourceUrl: sourceUrl.trim() || undefined,
             notes: notes.trim() || undefined,
+            imageUrl: currentImageUrl || undefined,
+            thumbnailUrl: currentThumbnailUrl || undefined,
           };
 
           // Add bulk or individual data based on current mode
@@ -237,6 +242,8 @@ export function RecipeEdit() {
             rating: rating ? Number(rating) : undefined,
             sourceUrl: sourceUrl.trim() || undefined,
             notes: notes.trim() || undefined,
+            imageUrl: currentImageUrl || undefined,
+            thumbnailUrl: currentThumbnailUrl || undefined,
           };
           
           await apiClient.updateRecipe(id, recipeData);
@@ -245,11 +252,15 @@ export function RecipeEdit() {
         // Handle image update if changed
         if (imageChanged) {
           if (selectedImageFile) {
+            // User uploaded a new file
             await apiClient.uploadRecipeImage(id, selectedImageFile);
-          } else if (currentImageUrl && !selectedImageFile) {
-            // Remove image if it was deleted
+          } else if (!currentImageUrl && !selectedImageFile) {
+            // Image was removed (both currentImageUrl and selectedImageFile are empty)
             await apiClient.deleteRecipeImage(id);
           }
+          // If currentImageUrl has a value but selectedImageFile is null,
+          // it means an AI image was generated and the URLs are already 
+          // included in the recipe update above - no additional action needed
         }
       } else {
         // Create new recipe
@@ -333,7 +344,7 @@ export function RecipeEdit() {
               sourceUrl: sourceUrl.trim() || undefined,
               notes: notes.trim() || undefined,
               imageUrl: currentImageUrl || undefined,
-              thumbnailUrl: undefined, // Will be set by backend if image is processed
+              thumbnailUrl: currentThumbnailUrl || undefined,
             };
             
             await apiClient.createRecipeBulk(bulkRecipeData);
@@ -354,6 +365,8 @@ export function RecipeEdit() {
               rating: rating ? Number(rating) : undefined,
               sourceUrl: sourceUrl.trim() || undefined,
               notes: notes.trim() || undefined,
+              imageUrl: currentImageUrl || undefined,
+              thumbnailUrl: currentThumbnailUrl || undefined,
             };
             
             await apiClient.createRecipe(recipeData);
@@ -500,6 +513,7 @@ export function RecipeEdit() {
   const handleImageRemove = () => {
     setSelectedImageFile(null);
     setCurrentImageUrl(undefined);
+    setCurrentThumbnailUrl(undefined);
     setImageChanged(true);
   };
 
@@ -640,6 +654,49 @@ export function RecipeEdit() {
     }
   };
 
+  const generateImageWithAI = async () => {
+    try {
+      setAiGenerating(prev => ({ ...prev, image: true }));
+
+      // Get current ingredients and steps data
+      const currentIngredients = ingredientsBulkMode 
+        ? parseBulkText(ingredientsBulkText)
+        : ingredients;
+      
+      const currentSteps = stepsBulkMode 
+        ? parseBulkText(stepsBulkText)
+        : steps;
+
+      // Prepare the request
+      const request = prepareAIImageGenerationRequest(
+        title,
+        description,
+        currentIngredients,
+        currentSteps
+      );
+
+      // Call the API
+      const response = await apiClient.generateRecipeImage(request);
+
+      if (response.success && response.imageUrl && response.thumbnailUrl) {
+        // Set the generated image as the current recipe image
+        setCurrentImageUrl(response.imageUrl);
+        setCurrentThumbnailUrl(response.thumbnailUrl);
+        setSelectedImageFile(null);
+        setImageChanged(true);
+        
+        console.log('Successfully generated AI image for recipe');
+      } else {
+        throw new Error(response.error || 'Failed to generate image');
+      }
+    } catch (error) {
+      console.error('Error generating image:', error);
+      alert(`Failed to generate image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setAiGenerating(prev => ({ ...prev, image: false }));
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -738,12 +795,58 @@ export function RecipeEdit() {
               />
             </div>
 
-            <ImageUpload
-              currentImageUrl={currentImageUrl}
-              onImageSelect={handleImageSelect}
-              onImageRemove={handleImageRemove}
-              disabled={saving}
-            />
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium">Recipe Image</label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={generateImageWithAI}
+                  disabled={
+                    !isRecipeReadyForAIImageGeneration(
+                      title,
+                      description,
+                      ingredientsBulkMode ? parseBulkText(ingredientsBulkText) : ingredients,
+                      stepsBulkMode ? parseBulkText(stepsBulkText) : steps
+                    ) || aiGenerating.image || saving
+                  }
+                  className="text-purple-600 border-purple-600 hover:bg-purple-50"
+                  title={
+                    getAIImageGenerationDisabledReason(
+                      title,
+                      description,
+                      ingredientsBulkMode ? parseBulkText(ingredientsBulkText) : ingredients,
+                      stepsBulkMode ? parseBulkText(stepsBulkText) : steps
+                    ) || "Generate AI image for this recipe"
+                  }
+                >
+                  <Bot className="h-3 w-3 mr-1" />
+                  {aiGenerating.image ? 'Generating...' : 'AI Generate Image'}
+                </Button>
+              </div>
+              <ImageUpload
+                currentImageUrl={currentImageUrl}
+                onImageSelect={handleImageSelect}
+                onImageRemove={handleImageRemove}
+                disabled={saving}
+              />
+              {!isRecipeReadyForAIImageGeneration(
+                title,
+                description,
+                ingredientsBulkMode ? parseBulkText(ingredientsBulkText) : ingredients,
+                stepsBulkMode ? parseBulkText(stepsBulkText) : steps
+              ) && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {getAIImageGenerationDisabledReason(
+                    title,
+                    description,
+                    ingredientsBulkMode ? parseBulkText(ingredientsBulkText) : ingredients,
+                    stepsBulkMode ? parseBulkText(stepsBulkText) : steps
+                  )}
+                </p>
+              )}
+            </div>
 
             <div className="grid gap-4 md:grid-cols-3">
               <div>

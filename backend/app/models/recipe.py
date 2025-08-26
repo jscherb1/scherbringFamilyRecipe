@@ -420,6 +420,21 @@ class Recipe(RecipeBase):
             if camel_case in processed_data and snake_case not in processed_data:
                 processed_data[snake_case] = processed_data[camel_case]
         
+        # Handle ingredients conversion from dictionaries to Ingredient objects
+        if 'ingredients' in processed_data and isinstance(processed_data['ingredients'], list):
+            converted_ingredients = []
+            for ingredient in processed_data['ingredients']:
+                if isinstance(ingredient, dict):
+                    # Convert dictionary to Ingredient object
+                    converted_ingredients.append(Ingredient(**ingredient))
+                elif isinstance(ingredient, str):
+                    # Convert string to Ingredient object for consistency
+                    converted_ingredients.append(Ingredient(text=ingredient, includeInShoppingList=True))
+                else:
+                    # Already an Ingredient object
+                    converted_ingredients.append(ingredient)
+            processed_data['ingredients'] = converted_ingredients
+        
         return cls(**processed_data)
 
 
@@ -463,6 +478,26 @@ class RecipeAIGenerateResponse(BaseModel):
     """Response model for AI-generated recipe"""
     success: bool = Field(..., description="Whether generation was successful")
     recipe_data: Optional[RecipeCreateBulk] = Field(None, alias="recipeData", description="Generated recipe data if successful")
+    error: Optional[str] = Field(None, description="Error message if generation failed")
+    
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class RecipeAIImageGenerateRequest(BaseModel):
+    """Request model for AI image generation"""
+    title: str = Field(..., min_length=1, description="Recipe title")
+    description: str = Field(..., min_length=1, description="Recipe description")
+    ingredients: List[str] = Field(..., min_items=1, description="List of recipe ingredients")
+    steps: List[str] = Field(..., min_items=1, description="List of recipe steps")
+    
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class RecipeAIImageGenerateResponse(BaseModel):
+    """Response model for AI-generated recipe image"""
+    success: bool = Field(..., description="Whether image generation was successful")
+    image_url: Optional[str] = Field(None, alias="imageUrl", description="Generated image URL if successful")
+    thumbnail_url: Optional[str] = Field(None, alias="thumbnailUrl", description="Generated thumbnail URL if successful")
     error: Optional[str] = Field(None, description="Error message if generation failed")
     
     model_config = ConfigDict(populate_by_name=True)

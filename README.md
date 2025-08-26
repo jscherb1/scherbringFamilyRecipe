@@ -2,6 +2,45 @@
 
 > 🎯 **Purpose**: A complete fullstack web development template featuring a **React** frontend and **FastAPI** backend, ready for rapid development and deployment.
 
+## ✨ Key Features
+
+### 🍽️ Recipe Management
+- ✅ Create, edit, and organize recipes
+- ✅ Bulk text input for ingredients and steps
+- ✅ Recipe categorization with tags and meal types
+- ✅ Rating and cooking time tracking
+- ✅ Recipe import from URLs
+- ✅ Export recipes to CSV and JSON
+
+### 🤖 AI-Powered Features
+- ✅ AI recipe generation with GPT models
+- ✅ AI-assisted ingredient and instruction generation
+- ✅ **NEW: AI image generation with DALL-E-3**
+- ✅ Smart recipe parsing and enhancement
+
+### 📸 Image Management
+- ✅ Recipe image upload to Azure Storage
+- ✅ Automatic thumbnail generation
+- ✅ **NEW: AI-generated recipe images**
+- ✅ Image optimization and storage
+
+### 📅 Meal Planning
+- ✅ Weekly meal planning interface
+- ✅ Drag-and-drop meal assignment
+- ✅ Shopping list generation from meal plans
+- ✅ Ingredient consolidation and optimization
+
+### 🔐 User Management
+- ✅ User profiles and preferences
+- ✅ Multi-user support with data isolation
+- ✅ Customizable dietary preferences
+
+### ☁️ Cloud-Native Architecture
+- ✅ Azure Cosmos DB for scalable data storage
+- ✅ Azure Storage for image handling
+- ✅ Azure AI Foundry integration
+- ✅ Container-based deployment ready
+
 ---
 
 ## 📥 Getting Started
