@@ -206,9 +206,10 @@ If you cannot provide JSON, format as clear text with sections for Title, Descri
 
             user_message = f"Create a recipe for: {prompt}"
             
-            # Generate recipe using OpenAI
+            # Generate recipe using OpenAI with instructor
             response = self.client.chat.completions.create(
                 model=settings.azure_ai_deployment_name,
+                response_model=GeneratedRecipe,
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message}
@@ -217,11 +218,9 @@ If you cannot provide JSON, format as clear text with sections for Title, Descri
                 max_tokens=2000
             )
             
-            response_text = response.choices[0].message.content
-            logger.info(f"AI response received: {response_text[:100]}...")
-            
-            # Parse the response
-            generated_recipe = self._parse_ai_response(response_text)
+            # The response is already a GeneratedRecipe object from instructor
+            generated_recipe = response
+            logger.info(f"AI response received: {generated_recipe.title}")
             
             # Convert to RecipeCreateBulk format
             recipe_data = RecipeCreateBulk(
