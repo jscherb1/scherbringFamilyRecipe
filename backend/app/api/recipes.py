@@ -2,10 +2,11 @@ from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, 
 from typing import List, Optional
 import logging
 import json
-from app.models.recipe import Recipe, RecipeCreate, RecipeCreateBulk, RecipeUpdate, RecipeUpdateBulk, ProteinType, MealType, RecipeUrlParseRequest, RecipeUrlParseResponse
+from app.models.recipe import Recipe, RecipeCreate, RecipeCreateBulk, RecipeUpdate, RecipeUpdateBulk, ProteinType, MealType, RecipeUrlParseRequest, RecipeUrlParseResponse, RecipeAIGenerateRequest, RecipeAIGenerateResponse
 from app.repositories.recipes import RecipeRepository
 from app.services.storage import storage_service
 from app.services.url_parser import url_parsing_service
+from app.services.ai_recipe_generator import ai_recipe_service
 from app.deps import get_recipe_repository
 
 logger = logging.getLogger(__name__)
@@ -516,3 +517,69 @@ async def delete_recipe_image(
     except Exception as e:
         logger.error(f"Error deleting image for recipe {recipe_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete image")
+
+
+@router.post("/generate-ai", response_model=RecipeAIGenerateResponse)
+async def generate_recipe_with_ai(
+    request: RecipeAIGenerateRequest
+):
+    """Generate a recipe using AI based on user prompt"""
+    try:
+        if not ai_recipe_service.is_available():
+            raise HTTPException(
+                status_code=503, 
+                detail="AI recipe generation service is not available. Please check configuration."
+            )
+        
+        logger.info(f"Generating AI recipe with prompt: {request.prompt}")
+        recipe_data = await ai_recipe_service.generate_recipe(request.prompt)
+        
+        return RecipeAIGenerateResponse(
+            success=True,
+            recipe_data=recipe_data
+        )
+        
+    except ValueError as e:
+        logger.error(f"AI generation validation error: {e}")
+        return RecipeAIGenerateResponse(
+            success=False,
+            error=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error generating AI recipe: {e}")
+        return RecipeAIGenerateResponse(
+            success=False,
+            error=f"Failed to generate recipe: {str(e)}"
+        )
+
+
+@router.post("/generate-ai-random", response_model=RecipeAIGenerateResponse)
+async def generate_random_recipe_with_ai():
+    """Generate a random recipe using AI"""
+    try:
+        if not ai_recipe_service.is_available():
+            raise HTTPException(
+                status_code=503, 
+                detail="AI recipe generation service is not available. Please check configuration."
+            )
+        
+        logger.info("Generating random AI recipe")
+        recipe_data = await ai_recipe_service.generate_random_recipe()
+        
+        return RecipeAIGenerateResponse(
+            success=True,
+            recipe_data=recipe_data
+        )
+        
+    except ValueError as e:
+        logger.error(f"AI generation validation error: {e}")
+        return RecipeAIGenerateResponse(
+            success=False,
+            error=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error generating random AI recipe: {e}")
+        return RecipeAIGenerateResponse(
+            success=False,
+            error=f"Failed to generate random recipe: {str(e)}"
+        )

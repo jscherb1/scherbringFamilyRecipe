@@ -319,6 +319,20 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+
+  // AI Recipe Generation
+  async generateRecipeWithAI(prompt: string): Promise<{ success: boolean; recipeData?: any; error?: string }> {
+    return this.request<{ success: boolean; recipeData?: any; error?: string }>('/api/recipes/generate-ai', {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
+    });
+  }
+
+  async generateRandomRecipeWithAI(): Promise<{ success: boolean; recipeData?: any; error?: string }> {
+    return this.request<{ success: boolean; recipeData?: any; error?: string }>('/api/recipes/generate-ai-random', {
+      method: 'POST',
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Textarea } from '../../components/ui/Textarea';
@@ -8,7 +8,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Checkbox } from '../../components/ui/Checkbox';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { TagInput } from '../../components/ui/TagInput';
-import { Plus, X, Save, ArrowLeft, List, FileText, Link, ShoppingCart } from 'lucide-react';
+import { Plus, X, Save, ArrowLeft, List, FileText, Link, ShoppingCart, Sparkles } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { RecipeCreate, RecipeCreateBulk, ProteinType, MealType, Ingredient } from '../../lib/types';
 import { parseBulkText, arrayToBulkText, getIngredientText, getIngredientShoppingFlag, createIngredientFromText, normalizeIngredients, filterValidIngredients } from '../../lib/utils';
@@ -17,7 +17,12 @@ import { UrlImportDialog } from '../../components/ui/UrlImportDialog';
 export function RecipeEdit() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const isEditing = Boolean(id);
+  
+  // Check if we have AI-generated data
+  const aiGeneratedData = location.state?.aiGeneratedData;
+  const isAIGenerated = location.state?.isAIGenerated;
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -63,6 +68,13 @@ export function RecipeEdit() {
     loadAvailableTags();
   }, []);
 
+  // Handle AI-generated data
+  useEffect(() => {
+    if (aiGeneratedData && !isEditing) {
+      populateFormWithAIData(aiGeneratedData);
+    }
+  }, [aiGeneratedData, isEditing]);
+
   const loadAvailableTags = async () => {
     try {
       const allTags = await apiClient.getTags();
@@ -76,6 +88,53 @@ export function RecipeEdit() {
     // Add the newly created tag to available tags
     if (!availableTags.includes(newTag)) {
       setAvailableTags([...availableTags, newTag]);
+    }
+  };
+
+  const populateFormWithAIData = (data: RecipeCreateBulk) => {
+    try {
+      // Populate basic fields
+      setTitle(data.title || '');
+      setDescription(data.description || '');
+      
+      // Handle tags
+      if (data.tags && data.tags.length > 0) {
+        setTags(data.tags);
+      }
+      
+      // Handle metadata
+      setProteinType(data.proteinType || '');
+      setMealType(data.mealType || 'dinner');
+      setPrepTimeMin(data.prepTimeMin || '');
+      setCookTimeMin(data.cookTimeMin || '');
+      setServings(data.servings || '');
+      setNotes(data.notes || '');
+      
+      // Handle ingredients - start in bulk mode with AI-generated text
+      if (data.ingredientsText) {
+        setIngredientsBulkText(data.ingredientsText);
+        setIngredientsBulkMode(true);
+      } else if (data.ingredients && data.ingredients.length > 0) {
+        // Convert to bulk text format
+        const ingredientTexts = data.ingredients.map(ing => 
+          typeof ing === 'string' ? ing : ing.text
+        );
+        setIngredientsBulkText(ingredientTexts.join('\n'));
+        setIngredientsBulkMode(true);
+      }
+      
+      // Handle steps - start in bulk mode with AI-generated text
+      if (data.stepsText) {
+        setStepsBulkText(data.stepsText);
+        setStepsBulkMode(true);
+      } else if (data.steps && data.steps.length > 0) {
+        setStepsBulkText(data.steps.join('\n'));
+        setStepsBulkMode(true);
+      }
+      
+      console.log('Populated form with AI-generated recipe data');
+    } catch (error) {
+      console.error('Error populating form with AI data:', error);
     }
   };
 
@@ -490,11 +549,24 @@ export function RecipeEdit() {
             Back to Recipes
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">
-              {isEditing ? 'Edit Recipe' : 'New Recipe'}
-            </h1>
+            <div className="flex items-center space-x-2">
+              <h1 className="text-3xl font-bold">
+                {isEditing ? 'Edit Recipe' : 'New Recipe'}
+              </h1>
+              {isAIGenerated && (
+                <Badge variant="outline" className="text-purple-600 border-purple-600">
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  AI Generated
+                </Badge>
+              )}
+            </div>
             <p className="text-muted-foreground">
-              {isEditing ? 'Update your recipe details' : 'Create a new recipe for your collection'}
+              {isEditing 
+                ? 'Update your recipe details' 
+                : isAIGenerated 
+                  ? 'Review and customize your AI-generated recipe'
+                  : 'Create a new recipe for your collection'
+              }
             </p>
           </div>
         </div>

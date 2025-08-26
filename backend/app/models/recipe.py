@@ -435,3 +435,17 @@ class RecipeUrlParseResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message if parsing failed")
     
     model_config = ConfigDict(populate_by_name=True)
+
+
+class RecipeAIGenerateRequest(BaseModel):
+    """Request model for AI recipe generation"""
+    prompt: str = Field(..., min_length=1, max_length=500, description="User prompt describing the desired recipe")
+
+
+class RecipeAIGenerateResponse(BaseModel):
+    """Response model for AI-generated recipe"""
+    success: bool = Field(..., description="Whether generation was successful")
+    recipe_data: Optional[RecipeCreateBulk] = Field(None, alias="recipeData", description="Generated recipe data if successful")
+    error: Optional[str] = Field(None, description="Error message if generation failed")
+    
+    model_config = ConfigDict(populate_by_name=True)
