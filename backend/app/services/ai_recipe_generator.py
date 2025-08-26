@@ -8,11 +8,24 @@ import json
 from typing import Optional, List
 import openai
 import httpx
+import instructor
 from pydantic import BaseModel, Field, ValidationError
 from app.config import settings
 from app.models.recipe import RecipeCreateBulk, ProteinType, MealType, Ingredient
 
 logger = logging.getLogger(__name__)
+
+class RecipeDescription(BaseModel):
+    """Structured model for recipe description generation."""
+    description: str = Field(..., description="A brief, appetizing description of the recipe")
+
+class RecipeIngredients(BaseModel):
+    """Structured model for recipe ingredients generation."""
+    ingredients: List[str] = Field(..., description="List of ingredients with precise measurements and quantities")
+
+class RecipeInstructions(BaseModel):
+    """Structured model for recipe instructions generation."""
+    instructions: List[str] = Field(..., description="Step-by-step cooking instructions, each step as a separate item")
 
 class GeneratedRecipe(BaseModel):
     """Structured recipe response model for AI generation."""
@@ -36,7 +49,7 @@ class AIRecipeGeneratorService:
         self._initialize_client()
     
     def _initialize_client(self):
-        """Initialize the OpenAI client with Azure AI Foundry settings."""
+        """Initialize the OpenAI client with Azure AI Foundry settings and instructor."""
         try:
             if not all([
                 settings.azure_ai_endpoint,
@@ -50,7 +63,7 @@ class AIRecipeGeneratorService:
             http_client = httpx.Client()
             
             # Create OpenAI client configured for Azure
-            self.client = openai.AzureOpenAI(
+            base_client = openai.AzureOpenAI(
                 azure_endpoint=settings.azure_ai_endpoint,
                 api_key=settings.azure_ai_api_key,
                 api_version=settings.azure_ai_api_version,
@@ -58,7 +71,10 @@ class AIRecipeGeneratorService:
                 http_client=http_client
             )
             
-            logger.info("AI recipe generator service initialized successfully")
+            # Wrap with instructor for structured responses
+            self.client = instructor.from_openai(base_client)
+            
+            logger.info("AI recipe generator service initialized successfully with instructor")
             
         except Exception as e:
             logger.error(f"Failed to initialize AI client: {e}")
@@ -229,6 +245,180 @@ If you cannot provide JSON, format as clear text with sections for Title, Descri
             logger.error(f"Failed to generate recipe: {e}")
             raise Exception(f"Recipe generation failed: {str(e)}")
     
+    async def generate_recipe_description(self, title: str, existing_ingredients: str = "", existing_instructions: str = "") -> str:
+        """
+        Generate a description for a recipe based on its title and optionally existing ingredients/instructions.
+        
+        Args:
+            title: Recipe title
+            existing_ingredients: Optional existing ingredients text
+            existing_instructions: Optional existing instructions text
+            
+        Returns:
+            str: Generated description
+        """
+        if not self.is_available():
+            raise ValueError("AI recipe generation service is not available")
+        
+        try:
+            # Build context based on what information is available
+            context_parts = [f"Recipe title: {title}"]
+            if existing_ingredients.strip():
+                context_parts.append(f"Ingredients: {existing_ingredients}")
+            if existing_instructions.strip():
+                context_parts.append(f"Instructions: {existing_instructions}")
+            
+            context = "\n".join(context_parts)
+            
+            system_message = "You are a professional chef and food writer. Generate a brief, appetizing description for a recipe based on the provided information. The description should be 1-3 sentences that would make someone want to cook and eat this dish. Focus on flavors, textures, and what makes this recipe special or appealing."
+            
+            user_message = f"Create a brief, appetizing description for this recipe:\n\n{context}"
+            
+            response = self.client.chat.completions.create(
+                model=settings.azure_ai_deployment_name,
+                response_model=RecipeDescription,
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=0.7,
+                max_tokens=200
+            )
+            
+            logger.info(f"Generated description for recipe: {title}")
+            return response.description
+            
+        except Exception as e:
+            logger.error(f"Failed to generate recipe description: {e}")
+            raise Exception(f"Description generation failed: {str(e)}")
+    
+    async def generate_recipe_ingredients(self, title: str, existing_description: str = "", existing_instructions: str = "") -> str:
+        """
+        Generate ingredients for a recipe based on its title and optionally existing description/instructions.
+        
+        Args:
+            title: Recipe title
+            existing_description: Optional existing description
+            existing_instructions: Optional existing instructions
+            
+        Returns:
+            str: Generated ingredients text (one per line, clean format)
+        """
+        if not self.is_available():
+            raise ValueError("AI recipe generation service is not available")
+        
+        try:
+            # Build context based on what information is available
+            context_parts = [f"Recipe title: {title}"]
+            if existing_description.strip():
+                context_parts.append(f"Description: {existing_description}")
+            if existing_instructions.strip():
+                context_parts.append(f"Instructions: {existing_instructions}")
+            
+            context = "\n".join(context_parts)
+            
+            system_message = """You are a professional chef. Generate a complete ingredient list for a recipe based on the provided information. Include specific quantities and measurements. 
+
+IMPORTANT: Return ONLY the ingredient lines, one per line. Do NOT include:
+- Headers like "Ingredients:" or "Ingredient List:"
+- Bullet points, dashes, or numbers
+- Any formatting characters
+- Empty lines
+
+Example format:
+1 cup all-purpose flour
+2 large eggs
+1 tsp vanilla extract
+1/2 cup butter, softened
+
+Be practical and realistic with portions for a typical serving size."""
+            
+            user_message = f"Create a complete ingredient list for this recipe:\n\n{context}"
+            
+            response = self.client.chat.completions.create(
+                model=settings.azure_ai_deployment_name,
+                response_model=RecipeIngredients,
+                messages=[
+                    {"role": "system", "content": "You are a professional chef. Generate a complete ingredient list for a recipe based on the provided information. Include specific quantities and measurements. Be practical and realistic with portions for a typical serving size. Each ingredient should be a complete item with quantity, unit, and ingredient name (e.g., '1/4 cup olive oil', '2 large eggs', '1 tsp vanilla extract')."},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=0.7,
+                max_tokens=800
+            )
+            
+            # Join ingredients with newlines for the expected format
+            ingredients = '\n'.join(response.ingredients)
+            logger.info(f"Generated {len(response.ingredients)} ingredients for recipe: {title}")
+            return ingredients
+            
+        except Exception as e:
+            logger.error(f"Failed to generate recipe ingredients: {e}")
+            raise Exception(f"Ingredients generation failed: {str(e)}")
+    
+    async def generate_recipe_instructions(self, title: str, existing_description: str = "", existing_ingredients: str = "") -> str:
+        """
+        Generate instructions for a recipe based on its title and optionally existing description/ingredients.
+        
+        Args:
+            title: Recipe title
+            existing_description: Optional existing description
+            existing_ingredients: Optional existing ingredients
+            
+        Returns:
+            str: Generated instructions text (one step per line, clean format)
+        """
+        if not self.is_available():
+            raise ValueError("AI recipe generation service is not available")
+        
+        try:
+            # Build context based on what information is available
+            context_parts = [f"Recipe title: {title}"]
+            if existing_description.strip():
+                context_parts.append(f"Description: {existing_description}")
+            if existing_ingredients.strip():
+                context_parts.append(f"Ingredients: {existing_ingredients}")
+            
+            context = "\n".join(context_parts)
+            
+            system_message = """You are a professional chef. Generate clear, step-by-step cooking instructions for a recipe based on the provided information. Each step should be on its own line and be specific about techniques, temperatures, and timing. Make the instructions easy to follow for home cooks. Include proper cooking temperatures and safety guidelines where appropriate.
+
+IMPORTANT: Return ONLY the instruction steps, one per line. Do NOT include:
+- Headers like "Instructions:", "Steps:", or "Directions:"
+- Step numbers (1., 2., 3., etc.)
+- Bullet points, dashes, or other formatting
+- Any formatting characters
+- Empty lines
+
+Example format:
+Preheat oven to 350°F and grease a 9x13 inch baking dish
+In a large bowl, whisk together flour, sugar, and baking powder
+Add eggs one at a time, mixing well after each addition
+Pour batter into prepared dish and bake for 25-30 minutes
+
+Each line should be a complete cooking step."""
+            
+            user_message = f"Create detailed step-by-step cooking instructions for this recipe:\n\n{context}"
+            
+            response = self.client.chat.completions.create(
+                model=settings.azure_ai_deployment_name,
+                response_model=RecipeInstructions,
+                messages=[
+                    {"role": "system", "content": "You are a professional chef. Generate clear, step-by-step cooking instructions for a recipe based on the provided information. Each step should be specific about techniques, temperatures, and timing. Make the instructions easy to follow for home cooks. Include proper cooking temperatures and safety guidelines where appropriate."},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=0.7,
+                max_tokens=1200
+            )
+            
+            # Join instructions with newlines for the expected format
+            instructions = '\n'.join(response.instructions)
+            logger.info(f"Generated {len(response.instructions)} instruction steps for recipe: {title}")
+            return instructions
+            
+        except Exception as e:
+            logger.error(f"Failed to generate recipe instructions: {e}")
+            raise Exception(f"Instructions generation failed: {str(e)}")
+
     async def generate_random_recipe(self) -> RecipeCreateBulk:
         """
         Generate a random recipe without user input.

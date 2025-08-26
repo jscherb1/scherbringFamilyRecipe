@@ -8,7 +8,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Checkbox } from '../../components/ui/Checkbox';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { TagInput } from '../../components/ui/TagInput';
-import { Plus, X, Save, ArrowLeft, List, FileText, Link, ShoppingCart, Sparkles } from 'lucide-react';
+import { Plus, X, Save, ArrowLeft, List, FileText, Link, ShoppingCart, Sparkles, Bot } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { RecipeCreate, RecipeCreateBulk, ProteinType, MealType, Ingredient } from '../../lib/types';
 import { parseBulkText, arrayToBulkText, getIngredientText, getIngredientShoppingFlag, createIngredientFromText, normalizeIngredients, filterValidIngredients } from '../../lib/utils';
@@ -57,6 +57,13 @@ export function RecipeEdit() {
   // URL import state
   const [showUrlImportDialog, setShowUrlImportDialog] = useState(false);
   const [urlImportLoading, setUrlImportLoading] = useState(false);
+
+  // AI generation state
+  const [aiGenerating, setAiGenerating] = useState({
+    description: false,
+    ingredients: false,
+    instructions: false
+  });
 
   useEffect(() => {
     if (isEditing && id) {
@@ -528,6 +535,111 @@ export function RecipeEdit() {
     setStepsBulkMode(false);
   };
 
+  // AI Generation functions
+  const handleGenerateDescription = async () => {
+    if (!title.trim()) {
+      alert('Please enter a recipe title first');
+      return;
+    }
+
+    try {
+      setAiGenerating(prev => ({ ...prev, description: true }));
+      
+      const existingIngredients = ingredientsBulkMode ? ingredientsBulkText : ingredients.map(getIngredientText).join('\n');
+      const existingInstructions = stepsBulkMode ? stepsBulkText : steps.join('\n');
+      
+      const response = await apiClient.generateRecipeDescriptionWithAI(
+        title.trim(),
+        existingIngredients,
+        existingInstructions
+      );
+      
+      if (response.success && response.generatedText) {
+        setDescription(response.generatedText);
+      } else {
+        alert(response.error || 'Failed to generate description');
+      }
+    } catch (error) {
+      console.error('Error generating description:', error);
+      alert('Failed to generate description');
+    } finally {
+      setAiGenerating(prev => ({ ...prev, description: false }));
+    }
+  };
+
+  const handleGenerateIngredients = async () => {
+    if (!title.trim()) {
+      alert('Please enter a recipe title first');
+      return;
+    }
+
+    try {
+      setAiGenerating(prev => ({ ...prev, ingredients: true }));
+      
+      const existingInstructions = stepsBulkMode ? stepsBulkText : steps.join('\n');
+      
+      const response = await apiClient.generateRecipeIngredientsWithAI(
+        title.trim(),
+        description,
+        existingInstructions
+      );
+      
+      if (response.success && response.generatedText) {
+        if (ingredientsBulkMode) {
+          setIngredientsBulkText(response.generatedText);
+        } else {
+          // Convert to individual ingredient objects
+          const ingredientLines = response.generatedText.split('\n').filter(line => line.trim());
+          const ingredientObjects = ingredientLines.map(line => createIngredientFromText(line, true));
+          setIngredients(ingredientObjects);
+        }
+      } else {
+        alert(response.error || 'Failed to generate ingredients');
+      }
+    } catch (error) {
+      console.error('Error generating ingredients:', error);
+      alert('Failed to generate ingredients');
+    } finally {
+      setAiGenerating(prev => ({ ...prev, ingredients: false }));
+    }
+  };
+
+  const handleGenerateInstructions = async () => {
+    if (!title.trim()) {
+      alert('Please enter a recipe title first');
+      return;
+    }
+
+    try {
+      setAiGenerating(prev => ({ ...prev, instructions: true }));
+      
+      const existingIngredients = ingredientsBulkMode ? ingredientsBulkText : ingredients.map(getIngredientText).join('\n');
+      
+      const response = await apiClient.generateRecipeInstructionsWithAI(
+        title.trim(),
+        description,
+        existingIngredients
+      );
+      
+      if (response.success && response.generatedText) {
+        if (stepsBulkMode) {
+          setStepsBulkText(response.generatedText);
+        } else {
+          // Convert to individual steps
+          const stepLines = response.generatedText.split('\n').filter(line => line.trim());
+          setSteps(stepLines);
+        }
+      } else {
+        alert(response.error || 'Failed to generate instructions');
+      }
+    } catch (error) {
+      console.error('Error generating instructions:', error);
+      alert('Failed to generate instructions');
+    } finally {
+      setAiGenerating(prev => ({ ...prev, instructions: false }));
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -604,7 +716,20 @@ export function RecipeEdit() {
             </div>
             
             <div>
-              <label className="text-sm font-medium">Description</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium">Description</label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateDescription}
+                  disabled={!title.trim() || aiGenerating.description || saving}
+                  className="text-purple-600 border-purple-600 hover:bg-purple-50"
+                >
+                  <Bot className="h-3 w-3 mr-1" />
+                  {aiGenerating.description ? 'Generating...' : 'AI Generate'}
+                </Button>
+              </div>
               <Textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -716,6 +841,17 @@ export function RecipeEdit() {
               <div className="flex space-x-2">
                 <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateIngredients}
+                  disabled={!title.trim() || aiGenerating.ingredients || saving}
+                  className="text-purple-600 border-purple-600 hover:bg-purple-50"
+                >
+                  <Bot className="h-3 w-3 mr-1" />
+                  {aiGenerating.ingredients ? 'Generating...' : 'AI Generate'}
+                </Button>
+                <Button
+                  type="button"
                   variant={ingredientsBulkMode ? "outline" : "default"}
                   size="sm"
                   onClick={ingredientsBulkMode ? switchToIngredientsIndividualMode : switchToIngredientsBulkMode}
@@ -800,6 +936,17 @@ export function RecipeEdit() {
                 <CardDescription>Step-by-step cooking instructions</CardDescription>
               </div>
               <div className="flex space-x-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateInstructions}
+                  disabled={!title.trim() || aiGenerating.instructions || saving}
+                  className="text-purple-600 border-purple-600 hover:bg-purple-50"
+                >
+                  <Bot className="h-3 w-3 mr-1" />
+                  {aiGenerating.instructions ? 'Generating...' : 'AI Generate'}
+                </Button>
                 <Button
                   type="button"
                   variant={stepsBulkMode ? "outline" : "default"}

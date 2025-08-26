@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, 
 from typing import List, Optional
 import logging
 import json
-from app.models.recipe import Recipe, RecipeCreate, RecipeCreateBulk, RecipeUpdate, RecipeUpdateBulk, ProteinType, MealType, RecipeUrlParseRequest, RecipeUrlParseResponse, RecipeAIGenerateRequest, RecipeAIGenerateResponse
+from app.models.recipe import Recipe, RecipeCreate, RecipeCreateBulk, RecipeUpdate, RecipeUpdateBulk, ProteinType, MealType, RecipeUrlParseRequest, RecipeUrlParseResponse, RecipeAIGenerateRequest, RecipeAIGenerateResponse, RecipeAIGeneratePartRequest, RecipeAIGeneratePartResponse
 from app.repositories.recipes import RecipeRepository
 from app.services.storage import storage_service
 from app.services.url_parser import url_parsing_service
@@ -550,6 +550,120 @@ async def generate_recipe_with_ai(
         return RecipeAIGenerateResponse(
             success=False,
             error=f"Failed to generate recipe: {str(e)}"
+        )
+
+
+@router.post("/generate-ai-description", response_model=RecipeAIGeneratePartResponse)
+async def generate_recipe_description_with_ai(
+    request: RecipeAIGeneratePartRequest
+):
+    """Generate a recipe description using AI based on title and existing content"""
+    try:
+        if not ai_recipe_service.is_available():
+            raise HTTPException(
+                status_code=503, 
+                detail="AI recipe generation service is not available. Please check configuration."
+            )
+        
+        logger.info(f"Generating AI description for recipe: {request.title}")
+        description = await ai_recipe_service.generate_recipe_description(
+            title=request.title,
+            existing_ingredients=request.existing_ingredients or "",
+            existing_instructions=request.existing_instructions or ""
+        )
+        
+        return RecipeAIGeneratePartResponse(
+            success=True,
+            generated_text=description
+        )
+        
+    except ValueError as e:
+        logger.error(f"AI description generation validation error: {e}")
+        return RecipeAIGeneratePartResponse(
+            success=False,
+            error=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error generating AI description: {e}")
+        return RecipeAIGeneratePartResponse(
+            success=False,
+            error=f"Failed to generate description: {str(e)}"
+        )
+
+
+@router.post("/generate-ai-ingredients", response_model=RecipeAIGeneratePartResponse)
+async def generate_recipe_ingredients_with_ai(
+    request: RecipeAIGeneratePartRequest
+):
+    """Generate recipe ingredients using AI based on title and existing content"""
+    try:
+        if not ai_recipe_service.is_available():
+            raise HTTPException(
+                status_code=503, 
+                detail="AI recipe generation service is not available. Please check configuration."
+            )
+        
+        logger.info(f"Generating AI ingredients for recipe: {request.title}")
+        ingredients = await ai_recipe_service.generate_recipe_ingredients(
+            title=request.title,
+            existing_description=request.existing_description or "",
+            existing_instructions=request.existing_instructions or ""
+        )
+        
+        return RecipeAIGeneratePartResponse(
+            success=True,
+            generated_text=ingredients
+        )
+        
+    except ValueError as e:
+        logger.error(f"AI ingredients generation validation error: {e}")
+        return RecipeAIGeneratePartResponse(
+            success=False,
+            error=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error generating AI ingredients: {e}")
+        return RecipeAIGeneratePartResponse(
+            success=False,
+            error=f"Failed to generate ingredients: {str(e)}"
+        )
+
+
+@router.post("/generate-ai-instructions", response_model=RecipeAIGeneratePartResponse)
+async def generate_recipe_instructions_with_ai(
+    request: RecipeAIGeneratePartRequest
+):
+    """Generate recipe instructions using AI based on title and existing content"""
+    try:
+        if not ai_recipe_service.is_available():
+            raise HTTPException(
+                status_code=503, 
+                detail="AI recipe generation service is not available. Please check configuration."
+            )
+        
+        logger.info(f"Generating AI instructions for recipe: {request.title}")
+        instructions = await ai_recipe_service.generate_recipe_instructions(
+            title=request.title,
+            existing_description=request.existing_description or "",
+            existing_ingredients=request.existing_ingredients or ""
+        )
+        
+        return RecipeAIGeneratePartResponse(
+            success=True,
+            generated_text=instructions
+        )
+        
+    except ValueError as e:
+        logger.error(f"AI instructions generation validation error: {e}")
+        return RecipeAIGeneratePartResponse(
+            success=False,
+            error=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error generating AI instructions: {e}")
+        return RecipeAIGeneratePartResponse(
+            success=False,
+            error=f"Failed to generate instructions: {str(e)}"
         )
 
 
