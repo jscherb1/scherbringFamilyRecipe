@@ -707,7 +707,7 @@ export function RecipeEdit() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 pb-20 sm:pb-24">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -1178,18 +1178,40 @@ export function RecipeEdit() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Submit */}
-        <div className="flex justify-end space-x-4">
-          <Button type="button" variant="outline" onClick={() => navigate('/recipes')}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={saving}>
-            <Save className="h-4 w-4 mr-2" />
-            {saving ? 'Saving...' : (isEditing ? 'Update Recipe' : 'Create Recipe')}
-          </Button>
-        </div>
       </form>
+
+      {/* Sticky Footer with Submit Buttons */}
+      <div className="fixed bottom-2 left-0 right-0 sm:bottom-0 bg-white border-t border-gray-200 shadow-lg z-50">
+        <div className="w-full px-3 py-2 sm:max-w-4xl sm:mx-auto sm:px-4 sm:py-4">
+          <div className="flex justify-center space-x-3 sm:space-x-4">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => navigate('/recipes')}
+              className="flex-1 max-w-[120px] h-10 text-sm sm:flex-none sm:min-w-[100px] sm:h-auto sm:text-base"
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="button" 
+              disabled={saving}
+              onClick={() => {
+                // Find and submit the form
+                const form = document.querySelector('form');
+                if (form) {
+                  form.requestSubmit();
+                }
+              }}
+              className="flex-1 max-w-[140px] h-10 text-sm sm:flex-none sm:min-w-[120px] sm:h-auto sm:text-base"
+            >
+              <Save className="h-3 w-3 mr-1 sm:h-4 sm:w-4 sm:mr-2" />
+              <span className="truncate">
+                {saving ? 'Saving...' : (isEditing ? 'Update' : 'Create')}
+              </span>
+            </Button>
+          </div>
+        </div>
+      </div>
 
       {/* URL Import Dialog */}
       <UrlImportDialog
