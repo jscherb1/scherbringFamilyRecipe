@@ -222,7 +222,7 @@ export function RecipeDetail() {
                   <li key={index} className="flex items-start justify-between group">
                     <div className="flex items-start">
                       <span className="inline-block w-2 h-2 rounded-full bg-gray-400 mt-2 mr-3 flex-shrink-0"></span>
-                      <span className={!includeInShopping ? "line-through text-gray-500" : ""}>{text}</span>
+                      <span>{text}</span>
                     </div>
                     <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       {includeInShopping ? (
