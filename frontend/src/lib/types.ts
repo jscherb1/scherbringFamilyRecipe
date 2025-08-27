@@ -1,6 +1,7 @@
 export interface Ingredient {
   text: string;
-  includeInShoppingList: boolean;
+  includeInShoppingList?: boolean;  // camelCase version
+  include_in_shopping_list?: boolean;  // snake_case version from backend
 }
 
 export type ProteinType = 

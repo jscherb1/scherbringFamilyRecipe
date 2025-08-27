@@ -11,7 +11,7 @@ import { TagInput } from '../../components/ui/TagInput';
 import { Plus, X, Save, ArrowLeft, List, FileText, Link, ShoppingCart, Sparkles, Bot } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { RecipeCreate, RecipeCreateBulk, ProteinType, MealType, Ingredient } from '../../lib/types';
-import { parseBulkText, arrayToBulkText, getIngredientText, getIngredientShoppingFlag, createIngredientFromText, normalizeIngredients, filterValidIngredients, isRecipeReadyForAIImageGeneration, getAIImageGenerationDisabledReason, prepareAIImageGenerationRequest } from '../../lib/utils';
+import { parseBulkText, arrayToBulkText, getIngredientText, getIngredientShoppingFlag, createIngredientFromText, normalizeIngredient, normalizeIngredients, filterValidIngredients, isRecipeReadyForAIImageGeneration, getAIImageGenerationDisabledReason, prepareAIImageGenerationRequest, bulkTextToIngredientsWithFlags } from '../../lib/utils';
 import { UrlImportDialog } from '../../components/ui/UrlImportDialog';
 
 export function RecipeEdit() {
@@ -48,6 +48,9 @@ export function RecipeEdit() {
   const [stepsBulkMode, setStepsBulkMode] = useState(true);
   const [ingredientsBulkText, setIngredientsBulkText] = useState('');
   const [stepsBulkText, setStepsBulkText] = useState('');
+  
+  // Store original ingredients to preserve shopping list flags when switching modes
+  const [originalIngredients, setOriginalIngredients] = useState<(Ingredient | string)[]>([]);
   
   // Image state
   const [currentImageUrl, setCurrentImageUrl] = useState<string | undefined>();
@@ -123,6 +126,11 @@ export function RecipeEdit() {
       if (data.ingredientsText) {
         setIngredientsBulkText(data.ingredientsText);
         setIngredientsBulkMode(true);
+        
+        // Convert to ingredients for original ingredients storage
+        const parsedIngredients = parseBulkText(data.ingredientsText);
+        const ingredientObjects = parsedIngredients.map(text => createIngredientFromText(text, true));
+        setOriginalIngredients(ingredientObjects);
       } else if (data.ingredients && data.ingredients.length > 0) {
         // Convert to bulk text format
         const ingredientTexts = data.ingredients.map(ing => 
@@ -130,6 +138,12 @@ export function RecipeEdit() {
         );
         setIngredientsBulkText(ingredientTexts.join('\n'));
         setIngredientsBulkMode(true);
+        
+        // Store original ingredients with proper structure
+        const normalizedIngredients = data.ingredients.map(ing =>
+          typeof ing === 'string' ? createIngredientFromText(ing, true) : ing
+        );
+        setOriginalIngredients(normalizedIngredients);
       }
       
       // Handle steps - start in bulk mode with AI-generated text
@@ -154,11 +168,20 @@ export function RecipeEdit() {
       
       setTitle(recipe.title);
       setDescription(recipe.description || '');
-      setIngredients(recipe.ingredients.length > 0 ? recipe.ingredients : [createIngredientFromText('', true)]);
+      
+      // Normalize ingredients to ensure consistent field names
+      const normalizedIngredients = recipe.ingredients.length > 0 
+        ? recipe.ingredients.map(normalizeIngredient) as Ingredient[]
+        : [createIngredientFromText('', true)];
+      
+      setIngredients(normalizedIngredients);
       setSteps(recipe.steps.length > 0 ? recipe.steps : ['']);
       
+      // Store original ingredients to preserve shopping list flags
+      setOriginalIngredients(normalizedIngredients);
+      
       // Also populate bulk text fields since bulk mode is now default
-      setIngredientsBulkText(arrayToBulkText(recipe.ingredients));
+      setIngredientsBulkText(arrayToBulkText(normalizedIngredients));
       setStepsBulkText(arrayToBulkText(recipe.steps));
       
       setTags(recipe.tags);
@@ -193,61 +216,43 @@ export function RecipeEdit() {
       setSaving(true);
       
       if (isEditing && id) {
-        // Update existing recipe - check if we should use bulk or individual mode
-        if (ingredientsBulkMode || stepsBulkMode) {
-          // Use bulk update API
-          const bulkRecipeData: any = {
-            title: title.trim(),
-            description: description.trim() || undefined,
-            tags,
-            proteinType: proteinType || undefined,
-            mealType,
-            prepTimeMin: prepTimeMin ? Number(prepTimeMin) : undefined,
-            cookTimeMin: cookTimeMin ? Number(cookTimeMin) : undefined,
-            servings: servings ? Number(servings) : undefined,
-            rating: rating ? Number(rating) : undefined,
-            sourceUrl: sourceUrl.trim() || undefined,
-            notes: notes.trim() || undefined,
-            imageUrl: currentImageUrl || undefined,
-            thumbnailUrl: currentThumbnailUrl || undefined,
-          };
-
-          // Add bulk or individual data based on current mode
-          if (ingredientsBulkMode) {
-            bulkRecipeData.ingredientsText = ingredientsBulkText;
-          } else {
-            bulkRecipeData.ingredients = filterValidIngredients(ingredients);
-          }
-
-          if (stepsBulkMode) {
-            bulkRecipeData.stepsText = stepsBulkText;
-          } else {
-            bulkRecipeData.steps = steps.filter(s => s.trim()).map(s => s.trim());
-          }
-
-          await apiClient.updateRecipeBulk(id, bulkRecipeData);
+        // Update existing recipe - always use standard API to preserve ingredient flags
+        // Prepare ingredients and steps from current mode
+        let finalIngredients: (Ingredient | string)[];
+        let finalSteps: string[];
+        
+        if (ingredientsBulkMode) {
+          // Convert bulk text to ingredients, preserving flags from original ingredients
+          finalIngredients = bulkTextToIngredientsWithFlags(ingredientsBulkText, originalIngredients);
         } else {
-          // Use standard update API
-          const recipeData: RecipeCreate = {
-            title: title.trim(),
-            description: description.trim() || undefined,
-            ingredients: filterValidIngredients(ingredients),
-            steps: steps.filter(s => s.trim()).map(s => s.trim()),
-            tags,
-            proteinType: proteinType || undefined,
-            mealType,
-            prepTimeMin: prepTimeMin ? Number(prepTimeMin) : undefined,
-            cookTimeMin: cookTimeMin ? Number(cookTimeMin) : undefined,
-            servings: servings ? Number(servings) : undefined,
-            rating: rating ? Number(rating) : undefined,
-            sourceUrl: sourceUrl.trim() || undefined,
-            notes: notes.trim() || undefined,
-            imageUrl: currentImageUrl || undefined,
-            thumbnailUrl: currentThumbnailUrl || undefined,
-          };
-          
-          await apiClient.updateRecipe(id, recipeData);
+          finalIngredients = filterValidIngredients(ingredients);
         }
+        
+        if (stepsBulkMode) {
+          finalSteps = parseBulkText(stepsBulkText);
+        } else {
+          finalSteps = steps.filter(s => s.trim()).map(s => s.trim());
+        }
+
+        const recipeData: RecipeCreate = {
+          title: title.trim(),
+          description: description.trim() || undefined,
+          ingredients: finalIngredients,
+          steps: finalSteps,
+          tags,
+          proteinType: proteinType || undefined,
+          mealType,
+          prepTimeMin: prepTimeMin ? Number(prepTimeMin) : undefined,
+          cookTimeMin: cookTimeMin ? Number(cookTimeMin) : undefined,
+          servings: servings ? Number(servings) : undefined,
+          rating: rating ? Number(rating) : undefined,
+          sourceUrl: sourceUrl.trim() || undefined,
+          notes: notes.trim() || undefined,
+          imageUrl: currentImageUrl || undefined,
+          thumbnailUrl: currentThumbnailUrl || undefined,
+        };
+        
+        await apiClient.updateRecipe(id, recipeData);
         
         // Handle image update if changed
         if (imageChanged) {
@@ -267,110 +272,83 @@ export function RecipeEdit() {
         console.log('Creating new recipe, selectedImageFile:', selectedImageFile);
         
         if (selectedImageFile) {
-          // Create recipe with image - check if we should use bulk or individual mode
-          if (ingredientsBulkMode || stepsBulkMode) {
-            // Use bulk with image API
-            console.log('Creating recipe with image using bulk input');
-            const formData = new FormData();
-            formData.append('title', title.trim());
-            if (description.trim()) formData.append('description', description.trim());
-            
-            // Handle ingredients
-            if (ingredientsBulkMode) {
-              formData.append('ingredients_text', ingredientsBulkText);
-            } else {
-              formData.append('ingredients', JSON.stringify(filterValidIngredients(ingredients)));
-            }
-            
-            // Handle steps
-            if (stepsBulkMode) {
-              formData.append('steps_text', stepsBulkText);
-            } else {
-              formData.append('steps', JSON.stringify(steps.filter(s => s.trim()).map(s => s.trim())));
-            }
-            
-            formData.append('tags', JSON.stringify(tags));
-            if (proteinType) formData.append('protein_type', proteinType);
-            formData.append('meal_type', mealType);
-            if (prepTimeMin) formData.append('prep_time_min', String(prepTimeMin));
-            if (cookTimeMin) formData.append('cook_time_min', String(cookTimeMin));
-            if (servings) formData.append('servings', String(servings));
-            if (rating) formData.append('rating', String(rating));
-            if (sourceUrl.trim()) formData.append('source_url', sourceUrl.trim());
-            if (notes.trim()) formData.append('notes', notes.trim());
-            formData.append('image', selectedImageFile);
-            
-            await apiClient.createRecipeWithImageBulk(formData);
+          // Create recipe with image - always use standard API to preserve ingredient flags
+          console.log('Creating recipe with image using individual input');
+          
+          // Prepare ingredients and steps from current mode
+          let finalIngredients: (Ingredient | string)[];
+          let finalSteps: string[];
+          
+          if (ingredientsBulkMode) {
+            // Convert bulk text to ingredients, preserving flags from original ingredients
+            finalIngredients = bulkTextToIngredientsWithFlags(ingredientsBulkText, originalIngredients);
           } else {
-            // Use standard with image API
-            console.log('Creating recipe with image using individual input');
-            const formData = new FormData();
-            formData.append('title', title.trim());
-            if (description.trim()) formData.append('description', description.trim());
-            formData.append('ingredients', JSON.stringify(filterValidIngredients(ingredients)));
-            formData.append('steps', JSON.stringify(steps.filter(s => s.trim()).map(s => s.trim())));
-            formData.append('tags', JSON.stringify(tags));
-            if (proteinType) formData.append('protein_type', proteinType);
-            formData.append('meal_type', mealType);
-            if (prepTimeMin) formData.append('prep_time_min', String(prepTimeMin));
-            if (cookTimeMin) formData.append('cook_time_min', String(cookTimeMin));
-            if (servings) formData.append('servings', String(servings));
-            if (rating) formData.append('rating', String(rating));
-            if (sourceUrl.trim()) formData.append('source_url', sourceUrl.trim());
-            if (notes.trim()) formData.append('notes', notes.trim());
-            formData.append('image', selectedImageFile);
-            
-            await apiClient.createRecipeWithImage(formData);
+            finalIngredients = filterValidIngredients(ingredients);
           }
+          
+          if (stepsBulkMode) {
+            finalSteps = parseBulkText(stepsBulkText);
+          } else {
+            finalSteps = steps.filter(s => s.trim()).map(s => s.trim());
+          }
+
+          const formData = new FormData();
+          formData.append('title', title.trim());
+          if (description.trim()) formData.append('description', description.trim());
+          formData.append('ingredients', JSON.stringify(finalIngredients));
+          formData.append('steps', JSON.stringify(finalSteps));
+          formData.append('tags', JSON.stringify(tags));
+          if (proteinType) formData.append('protein_type', proteinType);
+          formData.append('meal_type', mealType);
+          if (prepTimeMin) formData.append('prep_time_min', String(prepTimeMin));
+          if (cookTimeMin) formData.append('cook_time_min', String(cookTimeMin));
+          if (servings) formData.append('servings', String(servings));
+          if (rating) formData.append('rating', String(rating));
+          if (sourceUrl.trim()) formData.append('source_url', sourceUrl.trim());
+          if (notes.trim()) formData.append('notes', notes.trim());
+          formData.append('image', selectedImageFile);
+          
+          await apiClient.createRecipeWithImage(formData);
         } else {
-          // Create recipe without image - check if we should use bulk or individual mode
-          if (ingredientsBulkMode || stepsBulkMode) {
-            // Use bulk API
-            console.log('Creating recipe without image using bulk input');
-            const bulkRecipeData: RecipeCreateBulk = {
-              title: title.trim(),
-              description: description.trim() || undefined,
-              ingredientsText: ingredientsBulkMode ? ingredientsBulkText : undefined,
-              stepsText: stepsBulkMode ? stepsBulkText : undefined,
-              ingredients: !ingredientsBulkMode ? filterValidIngredients(ingredients) : undefined,
-              steps: !stepsBulkMode ? steps.filter(s => s.trim()).map(s => s.trim()) : undefined,
-              tags,
-              proteinType: proteinType || undefined,
-              mealType,
-              prepTimeMin: prepTimeMin ? Number(prepTimeMin) : undefined,
-              cookTimeMin: cookTimeMin ? Number(cookTimeMin) : undefined,
-              servings: servings ? Number(servings) : undefined,
-              rating: rating ? Number(rating) : undefined,
-              sourceUrl: sourceUrl.trim() || undefined,
-              notes: notes.trim() || undefined,
-              imageUrl: currentImageUrl || undefined,
-              thumbnailUrl: currentThumbnailUrl || undefined,
-            };
-            
-            await apiClient.createRecipeBulk(bulkRecipeData);
+          // Create recipe without image - always use standard API to preserve ingredient flags
+          console.log('Creating recipe without image using individual input');
+          
+          // Prepare ingredients and steps from current mode
+          let finalIngredients: (Ingredient | string)[];
+          let finalSteps: string[];
+          
+          if (ingredientsBulkMode) {
+            // Convert bulk text to ingredients, preserving flags from original ingredients
+            finalIngredients = bulkTextToIngredientsWithFlags(ingredientsBulkText, originalIngredients);
           } else {
-            // Use standard API
-            console.log('Creating recipe without image using individual input');
-            const recipeData: RecipeCreate = {
-              title: title.trim(),
-              description: description.trim() || undefined,
-              ingredients: filterValidIngredients(ingredients),
-              steps: steps.filter(s => s.trim()).map(s => s.trim()),
-              tags,
-              proteinType: proteinType || undefined,
-              mealType,
-              prepTimeMin: prepTimeMin ? Number(prepTimeMin) : undefined,
-              cookTimeMin: cookTimeMin ? Number(cookTimeMin) : undefined,
-              servings: servings ? Number(servings) : undefined,
-              rating: rating ? Number(rating) : undefined,
-              sourceUrl: sourceUrl.trim() || undefined,
-              notes: notes.trim() || undefined,
-              imageUrl: currentImageUrl || undefined,
-              thumbnailUrl: currentThumbnailUrl || undefined,
-            };
-            
-            await apiClient.createRecipe(recipeData);
+            finalIngredients = filterValidIngredients(ingredients);
           }
+          
+          if (stepsBulkMode) {
+            finalSteps = parseBulkText(stepsBulkText);
+          } else {
+            finalSteps = steps.filter(s => s.trim()).map(s => s.trim());
+          }
+          
+          const recipeData: RecipeCreate = {
+            title: title.trim(),
+            description: description.trim() || undefined,
+            ingredients: finalIngredients,
+            steps: finalSteps,
+            tags,
+            proteinType: proteinType || undefined,
+            mealType,
+            prepTimeMin: prepTimeMin ? Number(prepTimeMin) : undefined,
+            cookTimeMin: cookTimeMin ? Number(cookTimeMin) : undefined,
+            servings: servings ? Number(servings) : undefined,
+            rating: rating ? Number(rating) : undefined,
+            sourceUrl: sourceUrl.trim() || undefined,
+            notes: notes.trim() || undefined,
+            imageUrl: currentImageUrl || undefined,
+            thumbnailUrl: currentThumbnailUrl || undefined,
+          };
+          
+          await apiClient.createRecipe(recipeData);
         }
       }
       
@@ -400,6 +378,11 @@ export function RecipeEdit() {
         if (recipeData.ingredientsText) {
           setIngredientsBulkText(recipeData.ingredientsText);
           setIngredientsBulkMode(true);
+          
+          // Convert to ingredients for original ingredients storage
+          const parsedIngredients = parseBulkText(recipeData.ingredientsText);
+          const ingredientObjects = parsedIngredients.map(text => createIngredientFromText(text, true));
+          setOriginalIngredients(ingredientObjects);
         } else if (recipeData.ingredients && recipeData.ingredients.length > 0) {
           // Convert parsed ingredients to Ingredient objects if they're strings
           const normalizedIngredients = recipeData.ingredients.map(ing => 
@@ -407,6 +390,7 @@ export function RecipeEdit() {
           );
           setIngredients(normalizedIngredients);
           setIngredientsBulkText(arrayToBulkText(normalizedIngredients));
+          setOriginalIngredients(normalizedIngredients);
         }
         
         // Handle steps
@@ -446,7 +430,11 @@ export function RecipeEdit() {
   };
 
   const addIngredient = () => {
-    setIngredients([...ingredients, createIngredientFromText('', true)]);
+    const newIngredients = [...ingredients, createIngredientFromText('', true)];
+    setIngredients(newIngredients);
+    
+    // Update original ingredients to keep flags in sync
+    setOriginalIngredients(newIngredients);
   };
 
   const updateIngredient = (index: number, value: string) => {
@@ -464,6 +452,9 @@ export function RecipeEdit() {
       };
     }
     setIngredients(newIngredients);
+    
+    // Update original ingredients to keep flags in sync
+    setOriginalIngredients(newIngredients);
   };
 
   const updateIngredientShoppingFlag = (index: number, includeInShoppingList: boolean) => {
@@ -481,11 +472,18 @@ export function RecipeEdit() {
       };
     }
     setIngredients(newIngredients);
+    
+    // Update original ingredients to keep flags in sync
+    setOriginalIngredients(newIngredients);
   };
 
   const removeIngredient = (index: number) => {
     if (ingredients.length > 1) {
-      setIngredients(ingredients.filter((_, i) => i !== index));
+      const newIngredients = ingredients.filter((_, i) => i !== index);
+      setIngredients(newIngredients);
+      
+      // Update original ingredients to keep flags in sync
+      setOriginalIngredients(newIngredients);
     }
   };
 
@@ -523,14 +521,14 @@ export function RecipeEdit() {
     const bulkText = arrayToBulkText(filterValidIngredients(ingredients));
     setIngredientsBulkText(bulkText);
     setIngredientsBulkMode(true);
+    
+    // Update original ingredients to preserve current state
+    setOriginalIngredients(filterValidIngredients(ingredients));
   };
 
   const switchToIngredientsIndividualMode = () => {
-    // Convert current bulk text to individual ingredients
-    const individualItems = parseBulkText(ingredientsBulkText);
-    const ingredientObjects = individualItems.length > 0 
-      ? individualItems.map(text => createIngredientFromText(text, true))
-      : [createIngredientFromText('', true)];
+    // Convert current bulk text to individual ingredients, preserving shopping list flags
+    const ingredientObjects = bulkTextToIngredientsWithFlags(ingredientsBulkText, originalIngredients);
     setIngredients(ingredientObjects);
     setIngredientsBulkMode(false);
   };
