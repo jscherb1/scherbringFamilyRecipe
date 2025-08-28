@@ -8,8 +8,10 @@ from app.models.meal_plan import (
 )
 from app.repositories.mealplans import MealPlanRepository
 from app.repositories.recipes import RecipeRepository
+from app.repositories.profile import ProfileRepository
 from app.services.planner import MealPlannerService
 from app.services.exports import ExportService
+from app.services.todoist import todoist_service
 from app.deps import get_recipe_repository
 
 logger = logging.getLogger(__name__)
@@ -20,6 +22,7 @@ router = APIRouter(prefix="/api/mealplans", tags=["mealplans"])
 meal_plan_repo = MealPlanRepository()
 meal_planner = MealPlannerService()
 export_service = ExportService()
+profile_repo = ProfileRepository()
 
 @router.post("/generate")
 async def generate_meal_plan(
@@ -275,3 +278,67 @@ async def export_meal_plan_ics(meal_plan_id: str):
     except Exception as e:
         logger.error(f"Error exporting meal plan ICS {meal_plan_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.post("/{meal_plan_id}/export/todoist")
+async def export_to_todoist(
+    meal_plan_id: str, 
+    include_staples: bool = Query(default=False, description="Include staple groceries")
+):
+    """Export shopping list to Todoist"""
+    try:
+        # Get the meal plan
+        meal_plan = await meal_plan_repo.get_meal_plan(meal_plan_id)
+        if not meal_plan:
+            raise HTTPException(status_code=404, detail="Meal plan not found")
+        
+        # Get user profile for Todoist settings
+        profile = await profile_repo.get_profile()
+        if not profile or not profile.todoist_project_id:
+            raise HTTPException(
+                status_code=400, 
+                detail="Todoist integration not configured. Please set a Todoist project in your profile settings."
+            )
+        
+        # Get shopping list items
+        if include_staples:
+            ingredients_text = await export_service.export_consolidated_ingredients_with_staples(meal_plan)
+        else:
+            ingredients_text = await export_service.export_consolidated_ingredients(meal_plan)
+        
+        # Split into individual items (one per line)
+        shopping_items = [
+            item.strip() 
+            for item in ingredients_text.split('\n') 
+            if item.strip()
+        ]
+        
+        if not shopping_items:
+            return {
+                "success": True,
+                "itemsAdded": 0,
+                "totalItems": 0,
+                "projectName": profile.todoist_project_name or "Unknown Project",
+                "message": "No items to add to Todoist"
+            }
+        
+        # Add items to Todoist
+        items_added = await todoist_service.add_tasks(
+            project_id=profile.todoist_project_id,
+            task_contents=shopping_items
+        )
+        
+        return {
+            "success": True,
+            "itemsAdded": items_added,
+            "totalItems": len(shopping_items),
+            "projectName": profile.todoist_project_name or "Unknown Project",
+            "message": f"Added {items_added} items to {profile.todoist_project_name or 'Todoist'}"
+        }
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error exporting to Todoist {meal_plan_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to export to Todoist: {str(e)}")

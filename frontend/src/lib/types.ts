@@ -212,6 +212,8 @@ export interface UserProfile {
   tagCatalog: string[];
   stapleGroceries: string[];
   exportPrefs: Record<string, any>;
+  todoistProjectId?: string;
+  todoistProjectName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -225,6 +227,8 @@ export interface UserProfileUpdate {
   tagCatalog?: string[];
   stapleGroceries?: string[];
   exportPrefs?: Record<string, any>;
+  todoistProjectId?: string;
+  todoistProjectName?: string;
 }
 
 export interface RecipeUrlParseRequest {
@@ -249,4 +253,30 @@ export interface RecipeAIImageGenerateResponse {
   imageUrl?: string;
   thumbnailUrl?: string;
   error?: string;
+}
+
+// Todoist Integration Types
+export interface TodoistProject {
+  id: string;
+  name: string;
+  color?: string;
+  isShared?: boolean;
+  isFavorite?: boolean;
+}
+
+export interface TodoistProjectsResponse {
+  projects: TodoistProject[];
+}
+
+export interface TodoistConnectionResponse {
+  connected: boolean;
+  error?: string;
+}
+
+export interface TodoistExportResponse {
+  success: boolean;
+  itemsAdded: number;
+  totalItems: number;
+  projectName: string;
+  message: string;
 }

@@ -3,9 +3,9 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
-import { Save, Plus, X, User } from 'lucide-react';
+import { Save, Plus, X, User, Check, AlertCircle } from 'lucide-react';
 import { apiClient } from '../../lib/api';
-import { UserProfile, UserProfileUpdate } from '../../lib/types';
+import { UserProfile, UserProfileUpdate, TodoistProject } from '../../lib/types';
 
 export function ProfileSettings() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -27,9 +27,17 @@ export function ProfileSettings() {
   const [deletingTag, setDeletingTag] = useState<string | null>(null);
   const [loadingTags, setLoadingTags] = useState(false);
 
+  // Todoist integration state
+  const [todoistProjects, setTodoistProjects] = useState<TodoistProject[]>([]);
+  const [selectedTodoistProject, setSelectedTodoistProject] = useState<TodoistProject | null>(null);
+  const [todoistConnected, setTodoistConnected] = useState<boolean>(false);
+  const [loadingTodoist, setLoadingTodoist] = useState(false);
+  const [todoistError, setTodoistError] = useState<string | null>(null);
+
   useEffect(() => {
     loadProfile();
     loadRecipeTags();
+    loadTodoistData();
   }, []);
 
   const loadRecipeTags = async () => {
@@ -57,11 +65,44 @@ export function ProfileSettings() {
       setStartWeekOn(userProfile.startWeekOn);
       setTimezone(userProfile.timezone);
       setTagCatalog(userProfile.tagCatalog || []);
+      
+      // Set Todoist state
+      if (userProfile.todoistProjectId && userProfile.todoistProjectName) {
+        setSelectedTodoistProject({
+          id: userProfile.todoistProjectId,
+          name: userProfile.todoistProjectName
+        });
+      }
     } catch (error) {
       console.error('Failed to load profile:', error);
       // If profile doesn't exist, we'll create one when saving
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTodoistData = async () => {
+    try {
+      setLoadingTodoist(true);
+      setTodoistError(null);
+      
+      // Test connection first
+      const connectionTest = await apiClient.testTodoistConnection();
+      setTodoistConnected(connectionTest.connected);
+      
+      if (connectionTest.connected) {
+        // Load projects if connected
+        const projectsResponse = await apiClient.getTodoistProjects();
+        setTodoistProjects(projectsResponse.projects);
+      } else {
+        setTodoistError(connectionTest.error || 'Not connected to Todoist');
+      }
+    } catch (error) {
+      console.error('Failed to load Todoist data:', error);
+      setTodoistConnected(false);
+      setTodoistError('Failed to connect to Todoist');
+    } finally {
+      setLoadingTodoist(false);
     }
   };
 
@@ -76,6 +117,8 @@ export function ProfileSettings() {
       startWeekOn,
       timezone: timezone.trim() || 'UTC',
       tagCatalog,
+      todoistProjectId: selectedTodoistProject?.id || null,
+      todoistProjectName: selectedTodoistProject?.name || null,
     };
 
     try {
@@ -398,6 +441,90 @@ export function ProfileSettings() {
                 )}
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Todoist Integration */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Todoist Integration</CardTitle>
+            <CardDescription>
+              Sync your shopping lists to Todoist projects
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loadingTodoist ? (
+              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                <span>Loading Todoist integration...</span>
+              </div>
+            ) : !todoistConnected ? (
+              <div className="flex items-start space-x-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-amber-800">Todoist Not Connected</p>
+                  <p className="text-sm text-amber-700 mt-1">
+                    {todoistError || 'Please configure your Todoist API key to enable integration.'}
+                  </p>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={loadTodoistData}
+                  >
+                    Retry Connection
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2 text-sm text-green-700 bg-green-50 p-3 rounded-lg border border-green-200">
+                  <Check className="h-4 w-4" />
+                  <span>Connected to Todoist</span>
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium">Shopping List Project</label>
+                  <p className="text-xs text-muted-foreground mt-1 mb-2">
+                    Select which Todoist project to sync your shopping lists to
+                  </p>
+                  <select
+                    value={selectedTodoistProject?.id || ''}
+                    onChange={(e) => {
+                      const projectId = e.target.value;
+                      const project = todoistProjects.find(p => p.id === projectId);
+                      setSelectedTodoistProject(project || null);
+                    }}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="">Select a project...</option>
+                    {todoistProjects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                        {project.isFavorite ? ' ⭐' : ''}
+                        {project.isShared ? ' (Shared)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  
+                  {selectedTodoistProject && (
+                    <div className="mt-2 text-sm text-muted-foreground">
+                      Selected: <span className="font-medium">{selectedTodoistProject.name}</span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="text-xs text-muted-foreground bg-blue-50 p-3 rounded border border-blue-200">
+                  <p className="font-medium text-blue-800 mb-1">How it works:</p>
+                  <ul className="space-y-1 text-blue-700">
+                    <li>• Export shopping lists from meal plans directly to your selected Todoist project</li>
+                    <li>• Duplicate items are automatically detected and skipped</li>
+                    <li>• Only incomplete tasks are considered when checking for duplicates</li>
+                  </ul>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

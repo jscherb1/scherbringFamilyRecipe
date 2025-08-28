@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException
-from typing import List
+from typing import List, Dict, Any
 import logging
 from app.models.profile import UserProfile, UserProfileUpdate
 from app.repositories.profile import ProfileRepository
+from app.services.todoist import todoist_service
 
 logger = logging.getLogger(__name__)
 
@@ -46,3 +47,25 @@ async def remove_tag_from_catalog(tag: str):
     except Exception as e:
         logger.error(f"Error removing tag from catalog: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.get("/todoist/projects")
+async def get_todoist_projects():
+    """Get all Todoist projects for user selection"""
+    try:
+        projects = await todoist_service.get_projects()
+        return {"projects": projects}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error getting Todoist projects: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch Todoist projects")
+
+@router.get("/todoist/test")
+async def test_todoist_connection():
+    """Test Todoist API connection"""
+    try:
+        is_connected = await todoist_service.test_connection()
+        return {"connected": is_connected}
+    except Exception as e:
+        logger.error(f"Error testing Todoist connection: {e}")
+        return {"connected": False, "error": str(e)}
