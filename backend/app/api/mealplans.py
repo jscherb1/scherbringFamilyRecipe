@@ -315,7 +315,9 @@ async def export_to_todoist(
         if not shopping_items:
             return {
                 "success": True,
-                "items_added": 0,
+                "itemsAdded": 0,
+                "totalItems": 0,
+                "projectName": profile.todoist_project_name or "Unknown Project",
                 "message": "No items to add to Todoist"
             }
         
@@ -327,9 +329,9 @@ async def export_to_todoist(
         
         return {
             "success": True,
-            "items_added": items_added,
-            "total_items": len(shopping_items),
-            "project_name": profile.todoist_project_name or "Unknown Project",
+            "itemsAdded": items_added,
+            "totalItems": len(shopping_items),
+            "projectName": profile.todoist_project_name or "Unknown Project",
             "message": f"Added {items_added} items to {profile.todoist_project_name or 'Todoist'}"
         }
         
