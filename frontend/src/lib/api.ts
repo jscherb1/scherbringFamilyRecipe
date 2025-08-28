@@ -401,6 +401,13 @@ class ApiClient {
       method: 'POST',
     });
   }
+
+  async exportCustomIngredientsToTodoist(ingredients: string): Promise<TodoistExportResponse> {
+    return this.request<TodoistExportResponse>('/api/mealplans/export/todoist/custom', {
+      method: 'POST',
+      body: JSON.stringify({ ingredients }),
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

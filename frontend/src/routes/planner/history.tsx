@@ -502,6 +502,61 @@ function IngredientsModal({
   onIncludeStaplesChange?: (checked: boolean) => void;
   loadingIngredients?: boolean;
 }) {
+  const [editedIngredients, setEditedIngredients] = useState(ingredients);
+  const [isEdited, setIsEdited] = useState(false);
+
+  // Update edited ingredients when the original ingredients change
+  useEffect(() => {
+    setEditedIngredients(ingredients);
+    setIsEdited(false);
+  }, [ingredients]);
+
+  const handleIngredientsChange = (value: string) => {
+    setEditedIngredients(value);
+    setIsEdited(value !== ingredients);
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(editedIngredients);
+      alert('Copied to clipboard!');
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+      alert('Failed to copy to clipboard. Please select and copy manually.');
+    }
+  };
+
+  const handleSendToTodoist = async () => {
+    if (!onSendToTodoist) return;
+    
+    if (isEdited) {
+      // Use custom ingredients export for edited ingredients
+      try {
+        const result = await apiClient.exportCustomIngredientsToTodoist(editedIngredients);
+        
+        if (result.success) {
+          alert(`Success! Added ${result.itemsAdded} items to ${result.projectName}${result.totalItems > result.itemsAdded ? ` (${result.totalItems - result.itemsAdded} items were already in the list)` : ''}`);
+        } else {
+          alert('Failed to send to Todoist');
+        }
+      } catch (error: any) {
+        console.error('Failed to send custom ingredients to Todoist:', error);
+        let errorMessage = 'Failed to send to Todoist';
+        
+        if (error.message.includes('Todoist integration not configured')) {
+          errorMessage = 'Please configure Todoist integration in your profile settings first.';
+        } else if (error.message.includes('not configured')) {
+          errorMessage = 'Todoist API key not configured. Please contact the administrator.';
+        }
+        
+        alert(errorMessage);
+      }
+    } else {
+      // Use original meal plan export for unedited ingredients
+      onSendToTodoist();
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-2xl max-h-[80vh] flex flex-col">
@@ -510,13 +565,14 @@ function IngredientsModal({
             <CardTitle className="flex items-center gap-2">
               <ShoppingCart className="h-5 w-5" />
               Consolidated Shopping List
+              {isEdited && <Badge variant="outline" className="ml-2">Edited</Badge>}
             </CardTitle>
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="h-4 w-4" />
             </Button>
           </div>
           <CardDescription>
-            Copy this list to your todo app or shopping app
+            Edit and customize your shopping list, then copy or send to Todoist
           </CardDescription>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden flex flex-col gap-4">
@@ -528,10 +584,10 @@ function IngredientsModal({
               </div>
             ) : (
               <Textarea
-                value={ingredients}
-                readOnly
+                value={editedIngredients}
+                onChange={(e) => handleIngredientsChange(e.target.value)}
                 className="min-h-[300px] font-mono text-sm resize-none"
-                placeholder="Loading ingredients..."
+                placeholder="Enter ingredients, one per line..."
               />
             )}
           </div>
@@ -578,13 +634,13 @@ function IngredientsModal({
                   )}
                 </Button>
               )}
-              <Button onClick={onCopy} variant="outline" className="flex items-center gap-2">
+              <Button onClick={handleCopy} variant="outline" className="flex items-center gap-2">
                 <Copy className="h-4 w-4" />
                 Copy to Clipboard
               </Button>
               {onSendToTodoist && (
                 <Button 
-                  onClick={onSendToTodoist}
+                  onClick={handleSendToTodoist}
                   disabled={sendingToTodoist}
                   className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white"
                 >

@@ -1,3 +1,4 @@
+from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import Response
 from typing import List, Optional
@@ -15,6 +16,9 @@ from app.services.todoist import todoist_service
 from app.deps import get_recipe_repository
 
 logger = logging.getLogger(__name__)
+
+class CustomIngredientsRequest(BaseModel):
+    ingredients: str
 
 router = APIRouter(prefix="/api/mealplans", tags=["mealplans"])
 
@@ -341,4 +345,56 @@ async def export_to_todoist(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error exporting to Todoist {meal_plan_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to export to Todoist: {str(e)}")
+
+@router.post("/export/todoist/custom")
+async def export_custom_ingredients_to_todoist(
+    request: CustomIngredientsRequest
+):
+    """Export custom shopping list to Todoist"""
+    try:
+        # Get user profile for Todoist settings
+        profile = await profile_repo.get_profile()
+        if not profile or not profile.todoist_project_id:
+            raise HTTPException(
+                status_code=400, 
+                detail="Todoist integration not configured. Please set a Todoist project in your profile settings."
+            )
+        
+        # Split into individual items (one per line)
+        shopping_items = [
+            item.strip() 
+            for item in request.ingredients.split('\n') 
+            if item.strip()
+        ]
+        
+        if not shopping_items:
+            return {
+                "success": True,
+                "itemsAdded": 0,
+                "totalItems": 0,
+                "projectName": profile.todoist_project_name or "Unknown Project",
+                "message": "No items to add to Todoist"
+            }
+        
+        # Add items to Todoist
+        items_added = await todoist_service.add_tasks(
+            project_id=profile.todoist_project_id,
+            task_contents=shopping_items
+        )
+        
+        return {
+            "success": True,
+            "itemsAdded": items_added,
+            "totalItems": len(shopping_items),
+            "projectName": profile.todoist_project_name or "Unknown Project",
+            "message": f"Added {items_added} items to {profile.todoist_project_name or 'Todoist'}"
+        }
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error exporting custom ingredients to Todoist: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to export to Todoist: {str(e)}")

@@ -47,6 +47,10 @@ export function PlannerDetail() {
   // Todoist export state
   const [sendingToTodoist, setSendingToTodoist] = useState(false);
   const [includeStaples, setIncludeStaples] = useState(false);
+  
+  // Editable ingredients state
+  const [editedIngredientsText, setEditedIngredientsText] = useState('');
+  const [isIngredientsEdited, setIsIngredientsEdited] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -60,6 +64,12 @@ export function PlannerDetail() {
       loadIngredients();
     }
   }, [includeStaples, showIngredientsModal, plan]);
+
+  // Sync edited ingredients when original ingredients change
+  useEffect(() => {
+    setEditedIngredientsText(ingredientsText);
+    setIsIngredientsEdited(false);
+  }, [ingredientsText]);
 
   const loadPlan = async () => {
     try {
@@ -403,7 +413,10 @@ export function PlannerDetail() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Shopping List</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold">Shopping List</h3>
+                {isIngredientsEdited && <Badge variant="outline">Edited</Badge>}
+              </div>
               <Button variant="ghost" size="sm" onClick={() => setShowIngredientsModal(false)}>
                 <X className="h-4 w-4" />
               </Button>
@@ -415,7 +428,15 @@ export function PlannerDetail() {
                   <span className="ml-2 text-sm text-muted-foreground">Loading ingredients...</span>
                 </div>
               ) : (
-                <pre className="whitespace-pre-wrap text-sm">{ingredientsText}</pre>
+                <Textarea
+                  value={editedIngredientsText}
+                  onChange={(e) => {
+                    setEditedIngredientsText(e.target.value);
+                    setIsIngredientsEdited(e.target.value !== ingredientsText);
+                  }}
+                  className="min-h-[300px] font-mono text-sm resize-none"
+                  placeholder="Enter ingredients, one per line..."
+                />
               )}
             </div>
             <div className="p-4 border-t space-y-3">
@@ -435,12 +456,42 @@ export function PlannerDetail() {
               
               {/* Buttons */}
               <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => copyToClipboard(ingredientsText)}>
+                <Button variant="outline" onClick={() => copyToClipboard(editedIngredientsText)}>
                   <Copy className="h-4 w-4 mr-2" />
                   Copy to Clipboard
                 </Button>
                 <Button 
-                  onClick={sendToTodoist}
+                  onClick={async () => {
+                    if (isIngredientsEdited) {
+                      // Use custom ingredients export for edited ingredients
+                      try {
+                        setSendingToTodoist(true);
+                        const result = await apiClient.exportCustomIngredientsToTodoist(editedIngredientsText);
+                        
+                        if (result.success) {
+                          alert(`Success! Added ${result.itemsAdded} items to ${result.projectName}${result.totalItems > result.itemsAdded ? ` (${result.totalItems - result.itemsAdded} items were already in the list)` : ''}`);
+                        } else {
+                          alert('Failed to send to Todoist');
+                        }
+                      } catch (error: any) {
+                        console.error('Failed to send custom ingredients to Todoist:', error);
+                        let errorMessage = 'Failed to send to Todoist';
+                        
+                        if (error.message.includes('Todoist integration not configured')) {
+                          errorMessage = 'Please configure Todoist integration in your profile settings first.';
+                        } else if (error.message.includes('not configured')) {
+                          errorMessage = 'Todoist API key not configured. Please contact the administrator.';
+                        }
+                        
+                        alert(errorMessage);
+                      } finally {
+                        setSendingToTodoist(false);
+                      }
+                    } else {
+                      // Use original meal plan export for unedited ingredients
+                      sendToTodoist();
+                    }
+                  }}
                   disabled={sendingToTodoist}
                   className="bg-red-600 hover:bg-red-700 text-white"
                 >
