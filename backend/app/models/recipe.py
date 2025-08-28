@@ -425,8 +425,13 @@ class Recipe(RecipeBase):
             converted_ingredients = []
             for ingredient in processed_data['ingredients']:
                 if isinstance(ingredient, dict):
+                    # Handle field name mapping for ingredient dictionaries
+                    ingredient_data = ingredient.copy()
+                    # Map snake_case to camelCase for ingredient fields
+                    if 'include_in_shopping_list' in ingredient_data and 'includeInShoppingList' not in ingredient_data:
+                        ingredient_data['includeInShoppingList'] = ingredient_data['include_in_shopping_list']
                     # Convert dictionary to Ingredient object
-                    converted_ingredients.append(Ingredient(**ingredient))
+                    converted_ingredients.append(Ingredient(**ingredient_data))
                 elif isinstance(ingredient, str):
                     # Convert string to Ingredient object for consistency
                     converted_ingredients.append(Ingredient(text=ingredient, includeInShoppingList=True))

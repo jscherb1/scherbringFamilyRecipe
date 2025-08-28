@@ -13,7 +13,22 @@ export function getIngredientText(ingredient: Ingredient | string): string {
 
 export function getIngredientShoppingFlag(ingredient: Ingredient | string): boolean {
   // Legacy string ingredients default to included for backward compatibility
-  return typeof ingredient === 'string' ? true : ingredient.includeInShoppingList;
+  if (typeof ingredient === 'string') {
+    return true;
+  }
+  
+  // Handle both camelCase and snake_case field names
+  if ('includeInShoppingList' in ingredient) {
+    return ingredient.includeInShoppingList;
+  }
+  
+  // Handle snake_case from backend
+  if ('include_in_shopping_list' in (ingredient as any)) {
+    return (ingredient as any).include_in_shopping_list;
+  }
+  
+  // Default to true if field is missing
+  return true;
 }
 
 export function createIngredientFromText(text: string, includeInShoppingList: boolean = true): Ingredient {
@@ -27,7 +42,14 @@ export function normalizeIngredient(ingredient: Ingredient | string): Ingredient
   if (typeof ingredient === 'string') {
     return createIngredientFromText(ingredient, true);
   }
-  return ingredient;
+  
+  // Ensure we have the camelCase field name for frontend consistency
+  const normalized: Ingredient = {
+    text: ingredient.text,
+    includeInShoppingList: getIngredientShoppingFlag(ingredient)
+  };
+  
+  return normalized;
 }
 
 export function normalizeIngredients(ingredients: (Ingredient | string)[]): Ingredient[] {
@@ -143,6 +165,38 @@ export function arrayToBulkText(items: (string | Ingredient)[]): string {
     typeof item === 'string' ? item : item.text
   ).filter(text => text && text.trim().length > 0);
   return texts.join('\n');
+}
+
+/**
+ * Convert bulk text to ingredients, preserving shopping list flags from original ingredients when possible
+ * @param bulkText - Bulk text to parse
+ * @param originalIngredients - Original ingredients to preserve flags from
+ * @returns Array of ingredient objects with preserved flags where possible
+ */
+export function bulkTextToIngredientsWithFlags(
+  bulkText: string, 
+  originalIngredients: (string | Ingredient)[] = []
+): Ingredient[] {
+  const newTexts = parseBulkText(bulkText);
+  
+  // Create a map of text to shopping list flag from original ingredients
+  const flagMap = new Map<string, boolean>();
+  originalIngredients.forEach(ingredient => {
+    const text = getIngredientText(ingredient).trim().toLowerCase();
+    const flag = getIngredientShoppingFlag(ingredient);
+    if (text) {
+      flagMap.set(text, flag);
+    }
+  });
+  
+  // Convert new texts to ingredients, preserving flags where possible
+  return newTexts.length > 0 
+    ? newTexts.map(text => {
+        const normalizedText = text.trim().toLowerCase();
+        const preservedFlag = flagMap.get(normalizedText);
+        return createIngredientFromText(text, preservedFlag !== undefined ? preservedFlag : true);
+      })
+    : [createIngredientFromText('', true)];
 }
 
 /**

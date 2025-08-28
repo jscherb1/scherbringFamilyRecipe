@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
+import { Textarea } from '../../components/ui/Textarea';
 import { Calendar, Clock, ChefHat, Shuffle, History, Loader, Settings, Save } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { MealPlan, MealPlanGenerate, Recipe, MealPlanEntry } from '../../lib/types';
@@ -30,6 +31,8 @@ export function PlannerIndex() {
     return monday.toISOString().split('T')[0];
   });
   const [dinnersPerWeek, setDinnersPerWeek] = useState(5);
+  const [planName, setPlanName] = useState('');
+  const [planDescription, setPlanDescription] = useState('');
   
   // Current generated plan (not saved yet)
   const [generatedEntries, setGeneratedEntries] = useState<MealPlanEntry[]>([]);
@@ -89,11 +92,16 @@ export function PlannerIndex() {
           requiredRecipes: [],
           startWeekOn: 'monday'
         },
-        entries: generatedEntries
+        entries: generatedEntries,
+        name: planName || undefined,
+        description: planDescription || undefined
       });
       
       setCurrentPlan(newPlan);
       setHasUnsavedChanges(false);
+      
+      // Navigate to the meal plan details view
+      navigate(`/planner/${newPlan.id}`);
       
     } catch (error) {
       console.error('Failed to save meal plan:', error);
@@ -403,46 +411,72 @@ export function PlannerIndex() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Week Starting</label>
-              <Input
-                type="date"
-                value={weekStartDate}
-                onChange={(e) => setWeekStartDate(e.target.value)}
-                className="w-40"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Dinners per Week</label>
-              <div className="flex space-x-2">
-                <Button
-                  variant={dinnersPerWeek === 4 ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setDinnersPerWeek(4)}
-                >
-                  4 days
-                </Button>
-                <Button
-                  variant={dinnersPerWeek === 5 ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setDinnersPerWeek(5)}
-                  className="bg-orange-500 hover:bg-orange-600 text-white"
-                >
-                  5 days
-                </Button>
+          <div className="space-y-4">
+            {/* Plan Name and Description */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Plan Name (Optional)</label>
+                <Input
+                  value={planName}
+                  onChange={(e) => setPlanName(e.target.value)}
+                  placeholder="e.g., Holiday Week, Back to School"
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Description (Optional)</label>
+                <Textarea
+                  value={planDescription}
+                  onChange={(e) => setPlanDescription(e.target.value)}
+                  placeholder="e.g., Comfort foods for the holidays"
+                  className="w-full min-h-[80px]"
+                  rows={2}
+                />
               </div>
             </div>
+            
+            {/* Week Settings */}
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Week Starting</label>
+                <Input
+                  type="date"
+                  value={weekStartDate}
+                  onChange={(e) => setWeekStartDate(e.target.value)}
+                  className="w-40"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Dinners per Week</label>
+                <div className="flex space-x-2">
+                  <Button
+                    variant={dinnersPerWeek === 4 ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setDinnersPerWeek(4)}
+                  >
+                    4 days
+                  </Button>
+                  <Button
+                    variant={dinnersPerWeek === 5 ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setDinnersPerWeek(5)}
+                    className="bg-orange-500 hover:bg-orange-600 text-white"
+                  >
+                    5 days
+                  </Button>
+                </div>
+              </div>
 
-            <Button
-              onClick={generatePlan}
-              disabled={generating}
-              className="bg-orange-500 hover:bg-orange-600 text-white"
-            >
-              <Shuffle className="h-4 w-4 mr-2" />
-              {generating ? 'Generating...' : 'Generate Plan'}
-            </Button>
+              <Button
+                onClick={generatePlan}
+                disabled={generating}
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                <Shuffle className="h-4 w-4 mr-2" />
+                {generating ? 'Generating...' : 'Generate Plan'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

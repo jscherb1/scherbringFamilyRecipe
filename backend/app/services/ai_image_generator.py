@@ -92,7 +92,11 @@ class AIImageGeneratorService:
             raise ValueError("At least one step is required for image generation")
         
         # Create a detailed prompt for the recipe image
-        prompt = self._create_image_prompt(title, description, clean_ingredients, clean_steps)
+        raw_prompt = self._create_raw_image_prompt(title, description, clean_ingredients, clean_steps)
+        
+        # Use AI to sanitize the prompt for DALL-E content policy compliance
+        logger.info(f"Using AI to sanitize prompt for recipe: {title}")
+        prompt = await self._ai_sanitize_prompt(raw_prompt)
         
         try:
             # Generate image using DALL-E-3
@@ -110,7 +114,7 @@ class AIImageGeneratorService:
             logger.error(f"Error generating image for recipe '{title}': {e}")
             raise
     
-    def _create_image_prompt(self, title: str, description: str, ingredients: list[str], steps: list[str]) -> str:
+    def _create_raw_image_prompt(self, title: str, description: str, ingredients: list[str], steps: list[str]) -> str:
         """Create a detailed prompt for DALL-E-3 based on recipe data."""
         
         # Take first few ingredients to avoid token limits
@@ -125,7 +129,7 @@ class AIImageGeneratorService:
 
 Key ingredients visible: {', '.join(key_ingredients[:5])}
 
-Style: {cuisine_hints} High-quality restaurant presentation, natural lighting, appetizing colors, 
+Style: {cuisine_hints} Home-style naturally prepared, natural lighting, appetizing colors, 
 shot from a slight angle showing texture and detail. The dish should look freshly prepared and delicious, 
 with garnishes and plating that highlights the main ingredients. Clean, modern food photography style 
 with shallow depth of field and warm, inviting lighting."""
@@ -135,6 +139,77 @@ with shallow depth of field and warm, inviting lighting."""
             prompt = prompt[:997] + "..."
         
         return prompt
+    
+    async def _ai_sanitize_prompt(self, raw_prompt: str) -> str:
+        """Use AI to sanitize the image generation prompt for content policy compliance."""
+        if not self.api_key or not settings.azure_ai_deployment_name:
+            logger.warning("AI text model not available for prompt sanitization, using raw prompt")
+            return raw_prompt
+        
+        sanitization_request = f"""You are an expert at creating safe, compliant prompts for AI image generation. 
+Please rewrite the following food photography prompt to ensure it complies with content policies while maintaining the core visual intent.
+
+Rules:
+1. Remove any words that might trigger content filters (even innocent food terms that could be misinterpreted)
+2. Replace potentially problematic words with safe alternatives
+3. Focus on positive, appetizing, family-friendly descriptions
+4. Maintain the professional food photography style
+5. Keep the essential visual elements (dish name, style, lighting, composition)
+6. Ensure the prompt is suitable for DALL-E image generation
+
+Original prompt:
+{raw_prompt}
+
+Rewritten safe prompt:"""
+
+        try:
+            # Call the text LLM to sanitize the prompt
+            url = f"{self.base_url}/openai/deployments/{settings.azure_ai_deployment_name}/chat/completions"
+            
+            headers = {
+                "api-key": self.api_key,
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": sanitization_request
+                    }
+                ],
+                "max_tokens": 500,
+                "temperature": 0.3,  # Low temperature for consistent, safe outputs
+                "top_p": 0.9
+            }
+            
+            params = {
+                "api-version": self.api_version
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, json=payload, headers=headers, params=params)
+                response.raise_for_status()
+                
+                result = response.json()
+                
+                if "choices" not in result or len(result["choices"]) == 0:
+                    logger.warning("No response from AI sanitization, using raw prompt")
+                    return raw_prompt
+                
+                sanitized_prompt = result["choices"][0]["message"]["content"].strip()
+                
+                # Ensure we got a reasonable response
+                if len(sanitized_prompt) < 20:
+                    logger.warning("AI sanitization returned too short response, using raw prompt")
+                    return raw_prompt
+                
+                logger.info("Successfully sanitized prompt using AI")
+                return sanitized_prompt
+                
+        except Exception as e:
+            logger.warning(f"Failed to sanitize prompt with AI: {e}. Using raw prompt.")
+            return raw_prompt
     
     def _analyze_cuisine_style(self, ingredients: list[str]) -> str:
         """Analyze ingredients to suggest cuisine style for better image generation."""
@@ -193,8 +268,20 @@ with shallow depth of field and warm, inviting lighting."""
                 return image_data
                 
             except httpx.HTTPStatusError as e:
-                logger.error(f"DALL-E API HTTP error: {e.response.status_code} - {e.response.text}")
-                raise Exception(f"Failed to generate image: HTTP {e.response.status_code}")
+                error_text = e.response.text
+                logger.error(f"DALL-E API HTTP error: {e.response.status_code} - {error_text}")
+                
+                # Handle content policy violations with more helpful messages
+                if e.response.status_code == 400 and "content_policy_violation" in error_text:
+                    raise Exception("The AI-sanitized prompt still contains elements that cannot be used for image generation. This may be due to very strict content filters. Please try with a different recipe or contact support.")
+                elif e.response.status_code == 400:
+                    raise Exception(f"Invalid request to image generation service: Please check the recipe content.")
+                elif e.response.status_code == 429:
+                    raise Exception("Image generation service is currently busy. Please try again in a few moments.")
+                elif e.response.status_code >= 500:
+                    raise Exception("Image generation service is temporarily unavailable. Please try again later.")
+                else:
+                    raise Exception(f"Failed to generate image: HTTP {e.response.status_code}")
             except httpx.TimeoutException:
                 logger.error("DALL-E API request timed out")
                 raise Exception("Image generation timed out. Please try again.")

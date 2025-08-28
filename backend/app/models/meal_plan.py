@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from pydantic import BaseModel, Field, ConfigDict
@@ -53,6 +53,8 @@ class MealPlanBase(BaseModel):
     dinners_per_week: int = Field(5, ge=4, le=5)
     constraints: PlannerConstraints = Field(default_factory=PlannerConstraints)
     entries: List[MealPlanEntry] = Field(default_factory=list)
+    name: Optional[str] = None
+    description: Optional[str] = None
 
 class MealPlanCreate(MealPlanBase):
     pass
@@ -63,6 +65,8 @@ class MealPlanUpdate(BaseModel):
     dinners_per_week: Optional[int] = Field(None, ge=4, le=5)
     constraints: Optional[PlannerConstraints] = None
     entries: Optional[List[MealPlanEntry]] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
 
 class MealPlan(MealPlanBase):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
@@ -72,6 +76,26 @@ class MealPlan(MealPlanBase):
     type: str = "MealPlan"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    def __init__(self, **data):
+        """Initialize with default name and description if not provided"""
+        super().__init__(**data)
+        
+        if not self.name:
+            # Generate default name based on week start date
+            week_start = self.week_start_date
+            week_end = week_start + timedelta(days=6)
+            
+            # Format the dates
+            if week_start.month == week_end.month:
+                self.name = f"Week of {week_start.strftime('%B %d')}-{week_end.day}, {week_start.year}"
+            else:
+                self.name = f"Week of {week_start.strftime('%B %d')} - {week_end.strftime('%B %d')}, {week_start.year}"
+        
+        if not self.description:
+            # Generate default description
+            meal_count = len([entry for entry in self.entries if entry.recipe_id])
+            self.description = f"Meal plan with {meal_count} planned meals for the week starting {self.week_start_date.strftime('%B %d, %Y')}"
 
     def model_dump(self, **kwargs):
         """Override model_dump to handle date/datetime serialization"""
