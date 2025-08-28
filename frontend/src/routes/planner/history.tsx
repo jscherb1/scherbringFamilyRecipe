@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
 import { Textarea } from '../../components/ui/Textarea';
-import { Calendar, ArrowLeft, Trash2, Eye, ShoppingCart, Download, Copy, X, Plus } from 'lucide-react';
+import { Calendar, ArrowLeft, Trash2, Eye, ShoppingCart, Download, Copy, X, Plus, Send } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { MealPlan, Recipe } from '../../lib/types';
 import { formatDate } from '../../lib/utils';
@@ -21,10 +21,21 @@ export function PlannerHistory() {
   const [ingredientsText, setIngredientsText] = useState('');
   const [loadingIngredients, setLoadingIngredients] = useState(false);
   const [currentPlanId, setCurrentPlanId] = useState<string | null>(null);
+  
+  // Todoist export state
+  const [sendingToTodoist, setSendingToTodoist] = useState(false);
+  const [includeStaples, setIncludeStaples] = useState(false);
 
   useEffect(() => {
     loadPlans();
   }, []);
+
+  // Reload ingredients when staples option changes and modal is open
+  useEffect(() => {
+    if (showIngredientsModal && currentPlanId) {
+      loadIngredients(currentPlanId);
+    }
+  }, [includeStaples, showIngredientsModal, currentPlanId]);
 
   const loadPlans = async () => {
     try {
@@ -60,15 +71,21 @@ export function PlannerHistory() {
   };
 
   const exportIngredients = async (planId: string) => {
+    setCurrentPlanId(planId);
+    setShowIngredientsModal(true);
+    await loadIngredients(planId);
+  };
+
+  const loadIngredients = async (planId: string) => {
     try {
       setLoadingIngredients(true);
-      const response = await apiClient.exportConsolidatedIngredients(planId);
+      const response = includeStaples 
+        ? await apiClient.exportConsolidatedIngredientsWithStaples(planId)
+        : await apiClient.exportConsolidatedIngredients(planId);
       setIngredientsText(response.ingredients);
-      setCurrentPlanId(planId);
-      setShowIngredientsModal(true);
     } catch (error) {
-      console.error('Failed to export ingredients:', error);
-      alert('Failed to export ingredients. Please try again.');
+      console.error('Failed to load ingredients:', error);
+      alert('Failed to load ingredients. Please try again.');
     } finally {
       setLoadingIngredients(false);
     }
@@ -84,6 +101,34 @@ export function PlannerHistory() {
       alert('Failed to export ingredients with staples. Please try again.');
     } finally {
       setLoadingIngredients(false);
+    }
+  };
+
+  const sendToTodoist = async () => {
+    if (!currentPlanId) return;
+    
+    try {
+      setSendingToTodoist(true);
+      const result = await apiClient.exportToTodoist(currentPlanId, includeStaples);
+      
+      if (result.success) {
+        alert(`Success! Added ${result.itemsAdded} items to ${result.projectName}${result.totalItems > result.itemsAdded ? ` (${result.totalItems - result.itemsAdded} items were already in the list)` : ''}`);
+      } else {
+        alert('Failed to send to Todoist');
+      }
+    } catch (error: any) {
+      console.error('Failed to send to Todoist:', error);
+      let errorMessage = 'Failed to send to Todoist';
+      
+      if (error.message.includes('Todoist integration not configured')) {
+        errorMessage = 'Please configure Todoist integration in your profile settings first.';
+      } else if (error.message.includes('not configured')) {
+        errorMessage = 'Todoist API key not configured. Please contact the administrator.';
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setSendingToTodoist(false);
     }
   };
 
@@ -168,6 +213,11 @@ export function PlannerHistory() {
           onCopy={() => copyToClipboard(ingredientsText)}
           onAddStaples={currentPlanId ? () => exportIngredientsWithStaples(currentPlanId) : undefined}
           loadingStaples={loadingIngredients}
+          onSendToTodoist={sendToTodoist}
+          sendingToTodoist={sendingToTodoist}
+          includeStaples={includeStaples}
+          onIncludeStaplesChange={setIncludeStaples}
+          loadingIngredients={loadingIngredients}
         />
       )}
     </div>
@@ -434,13 +484,23 @@ function IngredientsModal({
   onClose,
   onCopy,
   onAddStaples,
-  loadingStaples = false
+  loadingStaples = false,
+  onSendToTodoist,
+  sendingToTodoist = false,
+  includeStaples = false,
+  onIncludeStaplesChange,
+  loadingIngredients = false
 }: {
   ingredients: string;
   onClose: () => void;
   onCopy: () => void;
   onAddStaples?: () => void;
   loadingStaples?: boolean;
+  onSendToTodoist?: () => void;
+  sendingToTodoist?: boolean;
+  includeStaples?: boolean;
+  onIncludeStaplesChange?: (checked: boolean) => void;
+  loadingIngredients?: boolean;
 }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -461,41 +521,78 @@ function IngredientsModal({
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden flex flex-col gap-4">
           <div className="flex-1 overflow-y-auto">
-            <Textarea
-              value={ingredients}
-              readOnly
-              className="min-h-[300px] font-mono text-sm resize-none"
-              placeholder="Loading ingredients..."
-            />
+            {loadingIngredients ? (
+              <div className="flex items-center justify-center py-8 min-h-[300px]">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                <span className="ml-2 text-sm text-muted-foreground">Loading ingredients...</span>
+              </div>
+            ) : (
+              <Textarea
+                value={ingredients}
+                readOnly
+                className="min-h-[300px] font-mono text-sm resize-none"
+                placeholder="Loading ingredients..."
+              />
+            )}
           </div>
-          <div className="flex justify-end gap-2">
+          
+          {/* Include staples option */}
+          {onIncludeStaplesChange && (
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="include-staples-history"
+                checked={includeStaples}
+                onChange={(e) => onIncludeStaplesChange(e.target.checked)}
+                className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary"
+              />
+              <label htmlFor="include-staples-history" className="text-sm text-gray-700">
+                Include staple groceries from profile
+              </label>
+            </div>
+          )}
+          
+          <div className="flex justify-between">
             <Button variant="outline" onClick={onClose}>
               Close
             </Button>
-            {onAddStaples && (
-              <Button 
-                variant="secondary" 
-                onClick={onAddStaples}
-                disabled={loadingStaples}
-                className="flex items-center gap-2"
-              >
-                {loadingStaples ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4" />
-                    Add Family Staple Items
-                  </>
-                )}
+            
+            <div className="flex gap-2">
+              {onAddStaples && (
+                <Button 
+                  variant="secondary" 
+                  onClick={onAddStaples}
+                  disabled={loadingStaples}
+                  className="flex items-center gap-2"
+                >
+                  {loadingStaples ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4" />
+                      Add Family Staple Items
+                    </>
+                  )}
+                </Button>
+              )}
+              <Button onClick={onCopy} variant="outline" className="flex items-center gap-2">
+                <Copy className="h-4 w-4" />
+                Copy to Clipboard
               </Button>
-            )}
-            <Button onClick={onCopy} className="flex items-center gap-2">
-              <Copy className="h-4 w-4" />
-              Copy to Clipboard
-            </Button>
+              {onSendToTodoist && (
+                <Button 
+                  onClick={onSendToTodoist}
+                  disabled={sendingToTodoist}
+                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white"
+                >
+                  <Send className="h-4 w-4" />
+                  {sendingToTodoist ? 'Sending...' : 'Send to Todoist'}
+                </Button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>

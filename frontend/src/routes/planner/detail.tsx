@@ -17,7 +17,8 @@ import {
   Copy,
   Lock,
   Unlock,
-  RotateCcw
+  RotateCcw,
+  Send
 } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { MealPlan, Recipe, MealPlanEntry, MealPlanUpdate } from '../../lib/types';
@@ -42,12 +43,23 @@ export function PlannerDetail() {
   const [showIngredientsModal, setShowIngredientsModal] = useState(false);
   const [ingredientsText, setIngredientsText] = useState('');
   const [loadingIngredients, setLoadingIngredients] = useState(false);
+  
+  // Todoist export state
+  const [sendingToTodoist, setSendingToTodoist] = useState(false);
+  const [includeStaples, setIncludeStaples] = useState(false);
 
   useEffect(() => {
     if (id) {
       loadPlan();
     }
   }, [id]);
+
+  // Reload ingredients when staples option changes and modal is open
+  useEffect(() => {
+    if (showIngredientsModal && plan) {
+      loadIngredients();
+    }
+  }, [includeStaples, showIngredientsModal, plan]);
 
   const loadPlan = async () => {
     try {
@@ -123,15 +135,22 @@ export function PlannerDetail() {
 
   const exportIngredients = async () => {
     if (!plan) return;
+    setShowIngredientsModal(true);
+    await loadIngredients();
+  };
+
+  const loadIngredients = async () => {
+    if (!plan) return;
     
     try {
       setLoadingIngredients(true);
-      const response = await apiClient.exportConsolidatedIngredients(plan.id);
+      const response = includeStaples 
+        ? await apiClient.exportConsolidatedIngredientsWithStaples(plan.id)
+        : await apiClient.exportConsolidatedIngredients(plan.id);
       setIngredientsText(response.ingredients);
-      setShowIngredientsModal(true);
     } catch (err) {
-      console.error('Failed to export ingredients:', err);
-      alert('Failed to export ingredients. Please try again.');
+      console.error('Failed to load ingredients:', err);
+      alert('Failed to load ingredients. Please try again.');
     } finally {
       setLoadingIngredients(false);
     }
@@ -144,6 +163,34 @@ export function PlannerDetail() {
     } catch (err) {
       console.error('Failed to copy to clipboard:', err);
       alert('Failed to copy to clipboard. Please select and copy manually.');
+    }
+  };
+
+  const sendToTodoist = async () => {
+    if (!plan) return;
+    
+    try {
+      setSendingToTodoist(true);
+      const result = await apiClient.exportToTodoist(plan.id, includeStaples);
+      
+      if (result.success) {
+        alert(`Success! Added ${result.itemsAdded} items to ${result.projectName}${result.totalItems > result.itemsAdded ? ` (${result.totalItems - result.itemsAdded} items were already in the list)` : ''}`);
+      } else {
+        alert('Failed to send to Todoist');
+      }
+    } catch (error: any) {
+      console.error('Failed to send to Todoist:', error);
+      let errorMessage = 'Failed to send to Todoist';
+      
+      if (error.message.includes('Todoist integration not configured')) {
+        errorMessage = 'Please configure Todoist integration in your profile settings first.';
+      } else if (error.message.includes('not configured')) {
+        errorMessage = 'Todoist API key not configured. Please contact the administrator.';
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setSendingToTodoist(false);
     }
   };
 
@@ -362,13 +409,45 @@ export function PlannerDetail() {
               </Button>
             </div>
             <div className="p-4 max-h-96 overflow-y-auto">
-              <pre className="whitespace-pre-wrap text-sm">{ingredientsText}</pre>
+              {loadingIngredients ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  <span className="ml-2 text-sm text-muted-foreground">Loading ingredients...</span>
+                </div>
+              ) : (
+                <pre className="whitespace-pre-wrap text-sm">{ingredientsText}</pre>
+              )}
             </div>
-            <div className="p-4 border-t flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => copyToClipboard(ingredientsText)}>
-                <Copy className="h-4 w-4 mr-2" />
-                Copy to Clipboard
-              </Button>
+            <div className="p-4 border-t space-y-3">
+              {/* Include staples option */}
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="include-staples"
+                  checked={includeStaples}
+                  onChange={(e) => setIncludeStaples(e.target.checked)}
+                  className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary"
+                />
+                <label htmlFor="include-staples" className="text-sm text-gray-700">
+                  Include staple groceries from profile
+                </label>
+              </div>
+              
+              {/* Buttons */}
+              <div className="flex justify-end space-x-2">
+                <Button variant="outline" onClick={() => copyToClipboard(ingredientsText)}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy to Clipboard
+                </Button>
+                <Button 
+                  onClick={sendToTodoist}
+                  disabled={sendingToTodoist}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  {sendingToTodoist ? 'Sending...' : 'Send to Todoist'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

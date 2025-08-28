@@ -17,7 +17,11 @@ import {
   UserProfile,
   UserProfileUpdate,
   ProteinType,
-  MealType
+  MealType,
+  TodoistProject,
+  TodoistProjectsResponse,
+  TodoistConnectionResponse,
+  TodoistExportResponse
 } from './types';
 
 // Get API base URL dynamically
@@ -375,6 +379,26 @@ class ApiClient {
     return this.request<RecipeAIImageGenerateResponse>('/api/recipes/ai/generate-image', {
       method: 'POST',
       body: JSON.stringify(request),
+    });
+  }
+
+  // Todoist Integration
+  async getTodoistProjects(): Promise<TodoistProjectsResponse> {
+    return this.request<TodoistProjectsResponse>('/api/profile/todoist/projects');
+  }
+
+  async testTodoistConnection(): Promise<TodoistConnectionResponse> {
+    return this.request<TodoistConnectionResponse>('/api/profile/todoist/test');
+  }
+
+  async exportToTodoist(mealPlanId: string, includeStaples: boolean = false): Promise<TodoistExportResponse> {
+    const params = new URLSearchParams();
+    if (includeStaples) {
+      params.append('include_staples', 'true');
+    }
+    
+    return this.request<TodoistExportResponse>(`/api/mealplans/${mealPlanId}/export/todoist?${params}`, {
+      method: 'POST',
     });
   }
 }

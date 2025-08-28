@@ -28,6 +28,8 @@ class UserProfileBase(BaseModel):
     ])
     staple_groceries: List[str] = Field(default_factory=list)
     export_prefs: Dict[str, Any] = Field(default_factory=dict)
+    todoist_project_id: Optional[str] = None
+    todoist_project_name: Optional[str] = None
 
 class UserProfileCreate(UserProfileBase):
     pass
@@ -46,6 +48,8 @@ class UserProfileUpdate(BaseModel):
     tag_catalog: List[str] = None
     staple_groceries: List[str] = None
     export_prefs: Dict[str, Any] = None
+    todoist_project_id: Optional[str] = None
+    todoist_project_name: Optional[str] = None
 
 class UserProfile(UserProfileBase):
     id: str = "profile-me"
@@ -107,6 +111,8 @@ class UserProfile(UserProfileBase):
             'tagCatalog': 'tag_catalog',
             'stapleGroceries': 'staple_groceries',
             'exportPrefs': 'export_prefs',
+            'todoistProjectId': 'todoist_project_id',
+            'todoistProjectName': 'todoist_project_name',
             'createdAt': 'created_at',
             'updatedAt': 'updated_at'
         }
