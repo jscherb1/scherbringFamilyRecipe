@@ -1,0 +1,378 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Button } from '../../components/ui/Button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
+import { Input } from '../../components/ui/Input';
+import { Textarea } from '../../components/ui/Textarea';
+import { 
+  Calendar, 
+  ArrowLeft, 
+  Edit, 
+  Save, 
+  X, 
+  Trash2, 
+  ShoppingCart, 
+  Download, 
+  Copy,
+  Lock,
+  Unlock,
+  RotateCcw
+} from 'lucide-react';
+import { apiClient } from '../../lib/api';
+import { MealPlan, Recipe, MealPlanEntry, MealPlanUpdate } from '../../lib/types';
+import { formatDate } from '../../lib/utils';
+
+export function PlannerDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  
+  const [plan, setPlan] = useState<MealPlan | null>(null);
+  const [recipes, setRecipes] = useState<Record<string, Recipe>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Edit state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedName, setEditedName] = useState('');
+  const [editedDescription, setEditedDescription] = useState('');
+  const [saving, setSaving] = useState(false);
+  
+  // Export modal states
+  const [showIngredientsModal, setShowIngredientsModal] = useState(false);
+  const [ingredientsText, setIngredientsText] = useState('');
+  const [loadingIngredients, setLoadingIngredients] = useState(false);
+
+  useEffect(() => {
+    if (id) {
+      loadPlan();
+    }
+  }, [id]);
+
+  const loadPlan = async () => {
+    try {
+      setLoading(true);
+      const mealPlan = await apiClient.getMealPlan(id!);
+      setPlan(mealPlan);
+      setEditedName(mealPlan.name || '');
+      setEditedDescription(mealPlan.description || '');
+      
+      // Load recipes for the meal plan
+      const recipeIds = mealPlan.entries
+        .filter(entry => entry.recipeId)
+        .map(entry => entry.recipeId!);
+      
+      if (recipeIds.length > 0) {
+        const recipesMap: Record<string, Recipe> = {};
+        // Load recipes individually - you might want to optimize this with a bulk endpoint
+        for (const recipeId of recipeIds) {
+          try {
+            const recipe = await apiClient.getRecipe(recipeId);
+            recipesMap[recipeId] = recipe;
+          } catch (err) {
+            console.error(`Failed to load recipe ${recipeId}:`, err);
+          }
+        }
+        setRecipes(recipesMap);
+      }
+    } catch (err) {
+      console.error('Failed to load meal plan:', err);
+      setError('Failed to load meal plan');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!plan) return;
+    
+    try {
+      setSaving(true);
+      
+      const update: MealPlanUpdate = {
+        name: editedName || undefined,
+        description: editedDescription || undefined
+      };
+      
+      const updatedPlan = await apiClient.updateMealPlan(plan.id, update);
+      setPlan(updatedPlan);
+      setIsEditing(false);
+    } catch (err) {
+      console.error('Failed to update meal plan:', err);
+      alert('Failed to update meal plan. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!plan) return;
+    
+    if (!confirm('Are you sure you want to delete this meal plan?')) {
+      return;
+    }
+
+    try {
+      await apiClient.deleteMealPlan(plan.id);
+      navigate('/planner/history');
+    } catch (err) {
+      console.error('Failed to delete meal plan:', err);
+      alert('Failed to delete meal plan');
+    }
+  };
+
+  const exportIngredients = async () => {
+    if (!plan) return;
+    
+    try {
+      setLoadingIngredients(true);
+      const response = await apiClient.exportConsolidatedIngredients(plan.id);
+      setIngredientsText(response.ingredients);
+      setShowIngredientsModal(true);
+    } catch (err) {
+      console.error('Failed to export ingredients:', err);
+      alert('Failed to export ingredients. Please try again.');
+    } finally {
+      setLoadingIngredients(false);
+    }
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('Copied to clipboard!');
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+      alert('Failed to copy to clipboard. Please select and copy manually.');
+    }
+  };
+
+  const exportIcsFile = async () => {
+    if (!plan) return;
+    
+    try {
+      const blob = await apiClient.exportMealPlanIcs(plan.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `meal-plan-${plan.id}.ics`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Failed to export ICS file:', err);
+      alert('Failed to export calendar file. Please try again.');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-2 text-muted-foreground">Loading meal plan...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !plan) {
+    return (
+      <div className="max-w-2xl mx-auto text-center space-y-4">
+        <h1 className="text-2xl font-bold text-destructive">Error</h1>
+        <p className="text-muted-foreground">{error || 'Meal plan not found'}</p>
+        <Button onClick={() => navigate('/planner')}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Planner
+        </Button>
+      </div>
+    );
+  }
+
+  const mealCount = plan.entries.filter(entry => entry.recipeId).length;
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <Button variant="ghost" onClick={() => navigate('/planner')}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Planner
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">
+              {plan.name || `Week of ${formatDate(plan.weekStartDate)}`}
+            </h1>
+            <p className="text-muted-foreground">
+              {plan.description || `${mealCount} planned meals`}
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          {!isEditing ? (
+            <>
+              <Button variant="outline" onClick={() => setIsEditing(true)}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+              <Button variant="outline" onClick={exportIngredients} disabled={loadingIngredients}>
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Shopping List
+              </Button>
+              <Button variant="outline" onClick={exportIcsFile}>
+                <Download className="h-4 w-4 mr-2" />
+                Calendar
+              </Button>
+              <Button variant="destructive" onClick={handleDelete}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => setIsEditing(false)}>
+                <X className="h-4 w-4 mr-2" />
+                Cancel
+              </Button>
+              <Button onClick={handleSave} disabled={saving}>
+                <Save className="h-4 w-4 mr-2" />
+                {saving ? 'Saving...' : 'Save'}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Edit Form */}
+      {isEditing && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Edit Meal Plan</CardTitle>
+            <CardDescription>Update the name and description of your meal plan</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Name</label>
+              <Input
+                value={editedName}
+                onChange={(e) => setEditedName(e.target.value)}
+                placeholder="Enter meal plan name"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Description</label>
+              <Textarea
+                value={editedDescription}
+                onChange={(e) => setEditedDescription(e.target.value)}
+                placeholder="Enter meal plan description"
+                rows={3}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Plan Overview */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Calendar className="h-5 w-5" />
+            <span>Meal Plan Overview</span>
+          </CardTitle>
+          <CardDescription>
+            Week starting {formatDate(plan.weekStartDate)} • {mealCount} meals planned
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4">
+            {plan.entries.map((entry, index) => {
+              const recipe = entry.recipeId ? recipes[entry.recipeId] : null;
+              const entryDate = new Date(entry.date);
+              
+              return (
+                <div key={entry.date} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-3">
+                      <div className="text-sm font-medium text-muted-foreground">
+                        {entryDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                      </div>
+                      {entry.locked && (
+                        <Lock className="h-4 w-4 text-yellow-500" />
+                      )}
+                    </div>
+                    
+                    {recipe ? (
+                      <div className="mt-1">
+                        <h4 className="font-medium">{recipe.title}</h4>
+                        {recipe.tags && recipe.tags.length > 0 && (
+                          <div className="flex items-center space-x-1 mt-1">
+                            {recipe.tags.slice(0, 3).map((tag) => (
+                              <Badge key={tag} variant="secondary" className="text-xs">
+                                {tag}
+                              </Badge>
+                            ))}
+                            {recipe.tags.length > 3 && (
+                              <span className="text-xs text-muted-foreground">
+                                +{recipe.tags.length - 3} more
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-muted-foreground">
+                        No meal planned
+                      </div>
+                    )}
+                    
+                    {entry.notes && (
+                      <p className="text-sm text-muted-foreground mt-1">{entry.notes}</p>
+                    )}
+                  </div>
+                  
+                  {recipe && (
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate(`/recipes/${recipe.id}`)}
+                      >
+                        View Recipe
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Ingredients Export Modal */}
+      {showIngredientsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Shopping List</h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowIngredientsModal(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="p-4 max-h-96 overflow-y-auto">
+              <pre className="whitespace-pre-wrap text-sm">{ingredientsText}</pre>
+            </div>
+            <div className="p-4 border-t flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => copyToClipboard(ingredientsText)}>
+                <Copy className="h-4 w-4 mr-2" />
+                Copy to Clipboard
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

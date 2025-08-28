@@ -164,8 +164,27 @@ export interface MealPlan {
   dinnersPerWeek: number;
   constraints: PlannerConstraints;
   entries: MealPlanEntry[];
+  name?: string;
+  description?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MealPlanCreate {
+  weekStartDate: string;
+  dinnersPerWeek: number;
+  constraints: PlannerConstraints;
+  entries: MealPlanEntry[];
+  name?: string;
+  description?: string;
+}
+
+export interface MealPlanUpdate {
+  dinnersPerWeek?: number;
+  constraints?: PlannerConstraints;
+  entries?: MealPlanEntry[];
+  name?: string;
+  description?: string;
 }
 
 export interface MealPlanGenerate {

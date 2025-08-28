@@ -10,6 +10,8 @@ import {
   RecipeAIImageGenerateRequest,
   RecipeAIImageGenerateResponse,
   MealPlan,
+  MealPlanCreate,
+  MealPlanUpdate,
   MealPlanGenerate,
   MealPlanGenerateResponse,
   UserProfile,
@@ -223,7 +225,7 @@ class ApiClient {
     });
   }
 
-  async createMealPlan(mealPlan: any): Promise<MealPlan> {
+  async createMealPlan(mealPlan: MealPlanCreate): Promise<MealPlan> {
     return this.request<MealPlan>('/api/mealplans/', {
       method: 'POST',
       body: JSON.stringify(mealPlan),
@@ -249,7 +251,7 @@ class ApiClient {
     return this.request<MealPlan>(`/api/mealplans/${id}`);
   }
 
-  async updateMealPlan(id: string, update: any): Promise<MealPlan> {
+  async updateMealPlan(id: string, update: MealPlanUpdate): Promise<MealPlan> {
     return this.request<MealPlan>(`/api/mealplans/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(update),

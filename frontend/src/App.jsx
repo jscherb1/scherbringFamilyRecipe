@@ -5,6 +5,7 @@ import { RecipeEdit } from './routes/recipes/edit';
 import { RecipeDetail } from './routes/recipes/detail';
 import { PlannerIndex } from './routes/planner/index';
 import { PlannerHistory } from './routes/planner/history';
+import { PlannerDetail } from './routes/planner/detail';
 import { ProfileSettings } from './routes/settings/profile';
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
             <Route path="/recipes/:id/edit" element={<RecipeEdit />} />
             <Route path="/planner" element={<PlannerIndex />} />
             <Route path="/planner/history" element={<PlannerHistory />} />
+            <Route path="/planner/:id" element={<PlannerDetail />} />
             <Route path="/settings/profile" element={<ProfileSettings />} />
           </Routes>
         </main>

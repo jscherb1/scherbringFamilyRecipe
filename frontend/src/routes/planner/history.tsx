@@ -250,9 +250,12 @@ function PlanCard({
               {plan.dinnersPerWeek} dinners/week
             </Badge>
             <div className="flex space-x-2">
-              <Button variant="outline" size="sm" onClick={onToggleDetails} className="flex-1 md:flex-none">
+              <Button variant="outline" size="sm" onClick={() => navigate(`/planner/${plan.id}`)} className="flex-1 md:flex-none">
                 <Eye className="h-4 w-4 mr-2" />
-                {isExpanded ? 'Hide Details' : 'View Details'}
+                View Plan
+              </Button>
+              <Button variant="outline" size="sm" onClick={onToggleDetails} className="flex-1 md:flex-none">
+                {isExpanded ? 'Hide Details' : 'Show Details'}
               </Button>
               <Button variant="outline" size="sm" onClick={onDelete} className="flex-1 md:flex-none">
                 <Trash2 className="h-4 w-4" />
