@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
 import { Textarea } from '../../components/ui/Textarea';
+import { GoogleCalendarSyncModal } from '../../components/ui/GoogleCalendarSyncModal';
 import { Calendar, ArrowLeft, Trash2, Eye, ShoppingCart, Download, Copy, X, Plus, Send } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { MealPlan, Recipe } from '../../lib/types';
@@ -25,6 +26,10 @@ export function PlannerHistory() {
   // Todoist export state
   const [sendingToTodoist, setSendingToTodoist] = useState(false);
   const [includeStaples, setIncludeStaples] = useState(false);
+
+  // Google Calendar sync state
+  const [showGoogleCalendarModal, setShowGoogleCalendarModal] = useState(false);
+  const [selectedPlanForCalendar, setSelectedPlanForCalendar] = useState<MealPlan | null>(null);
 
   useEffect(() => {
     loadPlans();
@@ -149,6 +154,11 @@ export function PlannerHistory() {
     }
   };
 
+  const openGoogleCalendarSync = (plan: MealPlan) => {
+    setSelectedPlanForCalendar(plan);
+    setShowGoogleCalendarModal(true);
+  };
+
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -199,6 +209,7 @@ export function PlannerHistory() {
               onToggleDetails={() => togglePlanDetails(plan.id)}
               onExportIngredients={() => exportIngredients(plan.id)}
               onExportIcs={() => exportIcsFile(plan.id)}
+              onGoogleCalendarSync={() => openGoogleCalendarSync(plan)}
               loadingIngredients={loadingIngredients}
             />
           ))}
@@ -220,6 +231,19 @@ export function PlannerHistory() {
           loadingIngredients={loadingIngredients}
         />
       )}
+
+      {/* Google Calendar Sync Modal */}
+      {selectedPlanForCalendar && (
+        <GoogleCalendarSyncModal
+          open={showGoogleCalendarModal}
+          onClose={() => {
+            setShowGoogleCalendarModal(false);
+            setSelectedPlanForCalendar(null);
+          }}
+          mealPlanId={selectedPlanForCalendar.id}
+          mealPlanName={selectedPlanForCalendar.name}
+        />
+      )}
     </div>
   );
 }
@@ -231,6 +255,7 @@ function PlanCard({
   onToggleDetails,
   onExportIngredients,
   onExportIcs,
+  onGoogleCalendarSync,
   loadingIngredients
 }: { 
   plan: MealPlan; 
@@ -239,6 +264,7 @@ function PlanCard({
   onToggleDetails: () => void;
   onExportIngredients: () => void;
   onExportIcs: () => void;
+  onGoogleCalendarSync: () => void;
   loadingIngredients: boolean;
 }) {
   const navigate = useNavigate();
@@ -420,6 +446,15 @@ function PlanCard({
                 >
                   <ShoppingCart className="h-4 w-4" />
                   {loadingIngredients ? 'Loading...' : 'Export Shopping List'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onGoogleCalendarSync}
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto"
+                >
+                  <Calendar className="h-4 w-4" />
+                  Google Calendar
                 </Button>
                 <Button
                   variant="outline"

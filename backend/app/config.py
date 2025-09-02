@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # Todoist integration
     todoist_api_key: str = ""
     
+    # Google Calendar integration (OAuth2 only)
+    google_client_id: str = ""
+    
     # Feature flags
     feature_ai: bool = False
     feature_import: bool = False
@@ -52,6 +55,9 @@ class Settings(BaseSettings):
         
         # Todoist integration
         self.todoist_api_key = os.getenv("TODOIST_API_KEY", "")
+        
+        # Google Calendar integration (OAuth2 only)
+        self.google_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
         
         # Feature flags
         self.feature_ai = os.getenv("FEATURE_AI", "false").lower() == "true"
