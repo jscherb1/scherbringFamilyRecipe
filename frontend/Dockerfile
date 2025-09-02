@@ -17,6 +17,7 @@ COPY . .
 RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'echo "window._env_ = {" > /app/dist/env-config.js' >> /app/start.sh && \
     echo 'echo "  VITE_API_BASE_URL: \"$VITE_API_BASE_URL\"," >> /app/dist/env-config.js' >> /app/start.sh && \
+    echo 'echo "  VITE_GOOGLE_CLIENT_ID: \"$VITE_GOOGLE_CLIENT_ID\"," >> /app/dist/env-config.js' >> /app/start.sh && \
     echo 'echo "};" >> /app/dist/env-config.js' >> /app/start.sh && \
     echo '# Inject the script tag into index.html' >> /app/start.sh && \
     echo 'sed -i "s|<head>|<head>\n    <script src=\"/env-config.js\"></script>|" /app/dist/index.html' >> /app/start.sh && \

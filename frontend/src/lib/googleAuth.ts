@@ -35,6 +35,12 @@ export class GoogleAuthService {
   constructor(config: GoogleAuthConfig) {
     this.clientId = config.clientId;
     this.scope = config.scope;
+    
+    // Debug logging for client ID
+    console.log('GoogleAuthService initialized with client ID:', this.clientId ? '[PRESENT]' : '[MISSING]');
+    if (!this.clientId) {
+      console.error('Google Client ID is missing. Check your environment variables.');
+    }
   }
 
   /**
@@ -100,8 +106,8 @@ export class GoogleAuthService {
   }
 }
 
-// Configuration - in a real app, this would come from environment variables
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+// Configuration - check runtime environment first, then build-time environment
+const GOOGLE_CLIENT_ID = (window as any)?._env_?.VITE_GOOGLE_CLIENT_ID || import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar';
 
 export const googleAuthService = new GoogleAuthService({
