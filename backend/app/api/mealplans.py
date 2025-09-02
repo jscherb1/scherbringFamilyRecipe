@@ -13,12 +13,18 @@ from app.repositories.profile import ProfileRepository
 from app.services.planner import MealPlannerService
 from app.services.exports import ExportService
 from app.services.todoist import todoist_service
+from app.services.google_calendar import GoogleCalendarService
 from app.deps import get_recipe_repository
 
 logger = logging.getLogger(__name__)
 
 class CustomIngredientsRequest(BaseModel):
     ingredients: str
+
+class GoogleCalendarRequest(BaseModel):
+    access_token: str
+    calendar_id: str
+    overwrite_existing: bool = False
 
 router = APIRouter(prefix="/api/mealplans", tags=["mealplans"])
 
@@ -27,6 +33,7 @@ meal_plan_repo = MealPlanRepository()
 meal_planner = MealPlannerService()
 export_service = ExportService()
 profile_repo = ProfileRepository()
+google_calendar_service = GoogleCalendarService()
 
 @router.post("/generate")
 async def generate_meal_plan(
@@ -398,3 +405,93 @@ async def export_custom_ingredients_to_todoist(
     except Exception as e:
         logger.error(f"Error exporting custom ingredients to Todoist: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to export to Todoist: {str(e)}")
+
+
+# Google Calendar Integration Endpoints
+
+@router.get("/{meal_plan_id}/google/calendars")
+async def get_google_calendars(
+    meal_plan_id: str,
+    access_token: str = Query(..., description="Google OAuth access token")
+):
+    """Get user's Google calendars for meal plan sync selection"""
+    try:
+        # Verify meal plan exists
+        meal_plan = await meal_plan_repo.get_meal_plan(meal_plan_id)
+        if not meal_plan:
+            raise HTTPException(status_code=404, detail="Meal plan not found")
+        
+        calendars = await google_calendar_service.get_user_calendars(access_token)
+        return {"calendars": calendars}
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error getting Google calendars: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get calendars: {str(e)}")
+
+
+@router.post("/{meal_plan_id}/google/calendar/check")
+async def check_google_calendar_conflicts(
+    meal_plan_id: str,
+    request: GoogleCalendarRequest
+):
+    """Check for existing events on Google Calendar that might conflict with meal plan"""
+    try:
+        meal_plan = await meal_plan_repo.get_meal_plan(meal_plan_id)
+        if not meal_plan:
+            raise HTTPException(status_code=404, detail="Meal plan not found")
+        
+        conflicting_events = await google_calendar_service.check_calendar_events(
+            access_token=request.access_token,
+            calendar_id=request.calendar_id,
+            meal_plan=meal_plan
+        )
+        
+        return {
+            "has_conflicts": len(conflicting_events) > 0,
+            "conflicting_events": conflicting_events
+        }
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error checking Google Calendar conflicts: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to check calendar conflicts: {str(e)}")
+
+
+@router.post("/{meal_plan_id}/google/calendar/sync")
+async def sync_meal_plan_to_google_calendar(
+    meal_plan_id: str,
+    request: GoogleCalendarRequest
+):
+    """Sync meal plan to Google Calendar"""
+    try:
+        meal_plan = await meal_plan_repo.get_meal_plan(meal_plan_id)
+        if not meal_plan:
+            raise HTTPException(status_code=404, detail="Meal plan not found")
+        
+        # Get recipe details for the meal plan
+        recipe_map = await export_service._get_recipe_map(meal_plan)
+        
+        result = await google_calendar_service.sync_meal_plan_to_calendar(
+            access_token=request.access_token,
+            calendar_id=request.calendar_id,
+            meal_plan=meal_plan,
+            recipe_map=recipe_map,
+            overwrite_existing=request.overwrite_existing
+        )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error syncing meal plan to Google Calendar: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to sync to Google Calendar: {str(e)}")

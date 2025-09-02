@@ -280,3 +280,39 @@ export interface TodoistExportResponse {
   projectName: string;
   message: string;
 }
+
+// Google Calendar Integration Types
+export interface GoogleCalendar {
+  id: string;
+  name: string;
+  description: string;
+  primary: boolean;
+  access_role: string;
+}
+
+export interface GoogleCalendarConflictingEvent {
+  id: string;
+  title: string;
+  date: string;
+  description: string;
+}
+
+export interface GoogleCalendarConflictCheck {
+  has_conflicts: boolean;
+  conflicting_events: GoogleCalendarConflictingEvent[];
+}
+
+export interface GoogleCalendarCreatedEvent {
+  id: string;
+  title: string;
+  date: string;
+}
+
+export interface GoogleCalendarSyncResult {
+  success: boolean;
+  events_created?: number;
+  created_events?: GoogleCalendarCreatedEvent[];
+  total_entries?: number;
+  error?: string;
+  conflicting_events?: GoogleCalendarConflictingEvent[];
+}

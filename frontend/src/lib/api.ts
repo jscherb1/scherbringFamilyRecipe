@@ -21,7 +21,10 @@ import {
   TodoistProject,
   TodoistProjectsResponse,
   TodoistConnectionResponse,
-  TodoistExportResponse
+  TodoistExportResponse,
+  GoogleCalendar,
+  GoogleCalendarConflictCheck,
+  GoogleCalendarSyncResult
 } from './types';
 
 // Get API base URL dynamically
@@ -406,6 +409,44 @@ class ApiClient {
     return this.request<TodoistExportResponse>('/api/mealplans/export/todoist/custom', {
       method: 'POST',
       body: JSON.stringify({ ingredients }),
+    });
+  }
+
+  // Google Calendar Integration
+  async getGoogleCalendars(mealPlanId: string, accessToken: string): Promise<{ calendars: GoogleCalendar[] }> {
+    return this.request<{ calendars: GoogleCalendar[] }>(`/api/mealplans/${mealPlanId}/google/calendars?access_token=${encodeURIComponent(accessToken)}`, {
+      method: 'GET',
+    });
+  }
+
+  async checkGoogleCalendarConflicts(
+    mealPlanId: string, 
+    accessToken: string, 
+    calendarId: string
+  ): Promise<GoogleCalendarConflictCheck> {
+    return this.request<GoogleCalendarConflictCheck>(`/api/mealplans/${mealPlanId}/google/calendar/check`, {
+      method: 'POST',
+      body: JSON.stringify({ 
+        access_token: accessToken,
+        calendar_id: calendarId,
+        overwrite_existing: false
+      }),
+    });
+  }
+
+  async syncMealPlanToGoogleCalendar(
+    mealPlanId: string,
+    accessToken: string,
+    calendarId: string,
+    overwriteExisting: boolean = false
+  ): Promise<GoogleCalendarSyncResult> {
+    return this.request<GoogleCalendarSyncResult>(`/api/mealplans/${mealPlanId}/google/calendar/sync`, {
+      method: 'POST',
+      body: JSON.stringify({
+        access_token: accessToken,
+        calendar_id: calendarId,
+        overwrite_existing: overwriteExisting
+      }),
     });
   }
 }

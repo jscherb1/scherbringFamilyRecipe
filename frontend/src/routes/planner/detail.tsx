@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
 import { Textarea } from '../../components/ui/Textarea';
+import { GoogleCalendarSyncModal } from '../../components/ui/GoogleCalendarSyncModal';
 import { 
   Calendar, 
   ArrowLeft, 
@@ -47,6 +48,9 @@ export function PlannerDetail() {
   // Todoist export state
   const [sendingToTodoist, setSendingToTodoist] = useState(false);
   const [includeStaples, setIncludeStaples] = useState(false);
+  
+  // Google Calendar sync state
+  const [showGoogleCalendarModal, setShowGoogleCalendarModal] = useState(false);
   
   // Editable ingredients state
   const [editedIngredientsText, setEditedIngredientsText] = useState('');
@@ -279,9 +283,13 @@ export function PlannerDetail() {
                 <ShoppingCart className="h-4 w-4 mr-2" />
                 Shopping List
               </Button>
+              <Button variant="outline" onClick={() => setShowGoogleCalendarModal(true)}>
+                <Calendar className="h-4 w-4 mr-2" />
+                Google Calendar
+              </Button>
               <Button variant="outline" onClick={exportIcsFile}>
                 <Download className="h-4 w-4 mr-2" />
-                Calendar
+                Download .ics
               </Button>
               <Button variant="destructive" onClick={handleDelete}>
                 <Trash2 className="h-4 w-4 mr-2" />
@@ -502,6 +510,16 @@ export function PlannerDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Google Calendar Sync Modal */}
+      {plan && (
+        <GoogleCalendarSyncModal
+          open={showGoogleCalendarModal}
+          onClose={() => setShowGoogleCalendarModal(false)}
+          mealPlanId={plan.id}
+          mealPlanName={plan.name}
+        />
       )}
     </div>
   );
