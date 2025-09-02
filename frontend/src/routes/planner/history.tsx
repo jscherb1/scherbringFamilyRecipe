@@ -26,6 +26,10 @@ export function PlannerHistory() {
   // Todoist export state
   const [sendingToTodoist, setSendingToTodoist] = useState(false);
   const [includeStaples, setIncludeStaples] = useState(false);
+  
+  // AI consolidation state
+  const [aiConsolidationUsed, setAiConsolidationUsed] = useState(false);
+  const [consolidationMethod, setConsolidationMethod] = useState('');
 
   // Google Calendar sync state
   const [showGoogleCalendarModal, setShowGoogleCalendarModal] = useState(false);
@@ -88,6 +92,14 @@ export function PlannerHistory() {
         ? await apiClient.exportConsolidatedIngredientsWithStaples(planId)
         : await apiClient.exportConsolidatedIngredients(planId);
       setIngredientsText(response.ingredients);
+      
+      // Update AI consolidation information
+      if (response.ai_consolidation_used !== undefined) {
+        setAiConsolidationUsed(response.ai_consolidation_used);
+      }
+      if (response.consolidation_method) {
+        setConsolidationMethod(response.consolidation_method);
+      }
     } catch (error) {
       console.error('Failed to load ingredients:', error);
       alert('Failed to load ingredients. Please try again.');
@@ -101,6 +113,14 @@ export function PlannerHistory() {
       setLoadingIngredients(true);
       const response = await apiClient.exportConsolidatedIngredientsWithStaples(planId);
       setIngredientsText(response.ingredients);
+      
+      // Update AI consolidation information
+      if (response.ai_consolidation_used !== undefined) {
+        setAiConsolidationUsed(response.ai_consolidation_used);
+      }
+      if (response.consolidation_method) {
+        setConsolidationMethod(response.consolidation_method);
+      }
     } catch (error) {
       console.error('Failed to export ingredients with staples:', error);
       alert('Failed to export ingredients with staples. Please try again.');
@@ -229,6 +249,8 @@ export function PlannerHistory() {
           includeStaples={includeStaples}
           onIncludeStaplesChange={setIncludeStaples}
           loadingIngredients={loadingIngredients}
+          aiConsolidationUsed={aiConsolidationUsed}
+          consolidationMethod={consolidationMethod}
         />
       )}
 
@@ -524,7 +546,9 @@ function IngredientsModal({
   sendingToTodoist = false,
   includeStaples = false,
   onIncludeStaplesChange,
-  loadingIngredients = false
+  loadingIngredients = false,
+  aiConsolidationUsed = false,
+  consolidationMethod = ''
 }: {
   ingredients: string;
   onClose: () => void;
@@ -536,6 +560,8 @@ function IngredientsModal({
   includeStaples?: boolean;
   onIncludeStaplesChange?: (checked: boolean) => void;
   loadingIngredients?: boolean;
+  aiConsolidationUsed?: boolean;
+  consolidationMethod?: string;
 }) {
   const [editedIngredients, setEditedIngredients] = useState(ingredients);
   const [isEdited, setIsEdited] = useState(false);
@@ -626,6 +652,28 @@ function IngredientsModal({
               />
             )}
           </div>
+          
+          {/* AI Consolidation Information */}
+          {consolidationMethod && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <div className="text-sm">
+                  <span className="font-medium text-blue-900">Consolidation Method: </span>
+                  <span className="text-blue-700">{consolidationMethod}</span>
+                </div>
+                {aiConsolidationUsed && (
+                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
+                    AI Enhanced
+                  </Badge>
+                )}
+              </div>
+              {aiConsolidationUsed && (
+                <p className="text-xs text-blue-600 mt-1">
+                  Ingredients were intelligently consolidated using grocery shopping AI
+                </p>
+              )}
+            </div>
+          )}
           
           {/* Include staples option */}
           {onIncludeStaplesChange && (

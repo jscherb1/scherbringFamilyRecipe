@@ -49,6 +49,10 @@ export function PlannerDetail() {
   const [sendingToTodoist, setSendingToTodoist] = useState(false);
   const [includeStaples, setIncludeStaples] = useState(false);
   
+  // AI consolidation state
+  const [aiConsolidationUsed, setAiConsolidationUsed] = useState(false);
+  const [consolidationMethod, setConsolidationMethod] = useState('');
+  
   // Google Calendar sync state
   const [showGoogleCalendarModal, setShowGoogleCalendarModal] = useState(false);
   
@@ -162,6 +166,14 @@ export function PlannerDetail() {
         ? await apiClient.exportConsolidatedIngredientsWithStaples(plan.id)
         : await apiClient.exportConsolidatedIngredients(plan.id);
       setIngredientsText(response.ingredients);
+      
+      // Update AI consolidation information
+      if (response.ai_consolidation_used !== undefined) {
+        setAiConsolidationUsed(response.ai_consolidation_used);
+      }
+      if (response.consolidation_method) {
+        setConsolidationMethod(response.consolidation_method);
+      }
     } catch (err) {
       console.error('Failed to load ingredients:', err);
       alert('Failed to load ingredients. Please try again.');
@@ -448,6 +460,28 @@ export function PlannerDetail() {
               )}
             </div>
             <div className="p-4 border-t space-y-3">
+              {/* AI Consolidation Information */}
+              {consolidationMethod && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm">
+                      <span className="font-medium text-blue-900">Consolidation Method: </span>
+                      <span className="text-blue-700">{consolidationMethod}</span>
+                    </div>
+                    {aiConsolidationUsed && (
+                      <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
+                        AI Enhanced
+                      </Badge>
+                    )}
+                  </div>
+                  {aiConsolidationUsed && (
+                    <p className="text-xs text-blue-600 mt-1">
+                      Ingredients were intelligently consolidated using grocery shopping AI
+                    </p>
+                  )}
+                </div>
+              )}
+              
               {/* Include staples option */}
               <div className="flex items-center space-x-2">
                 <input
