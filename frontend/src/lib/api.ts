@@ -22,6 +22,7 @@ import {
   TodoistProjectsResponse,
   TodoistConnectionResponse,
   TodoistExportResponse,
+  IngredientExportResponse,
   GoogleCalendar,
   GoogleCalendarConflictCheck,
   GoogleCalendarSyncResult
@@ -294,12 +295,16 @@ class ApiClient {
     return response.blob();
   }
 
-  async exportConsolidatedIngredients(id: string): Promise<{ingredients: string}> {
-    return this.request<{ingredients: string}>(`/api/mealplans/${id}/export/ingredients`);
+  async exportConsolidatedIngredients(id: string): Promise<IngredientExportResponse> {
+    return this.request<IngredientExportResponse>(`/api/mealplans/${id}/export/ingredients`);
   }
 
-  async exportConsolidatedIngredientsWithStaples(id: string): Promise<{ingredients: string}> {
-    return this.request<{ingredients: string}>(`/api/mealplans/${id}/export/ingredients/with-staples`);
+  async exportConsolidatedIngredientsWithStaples(id: string): Promise<IngredientExportResponse> {
+    return this.request<IngredientExportResponse>(`/api/mealplans/${id}/export/ingredients/with-staples`);
+  }
+
+  async getIngredientConsolidationStatus(id: string): Promise<{ai_available: boolean, feature_enabled: boolean, consolidation_method: string}> {
+    return this.request<{ai_available: boolean, feature_enabled: boolean, consolidation_method: string}>(`/api/mealplans/${id}/export/ingredients/ai-status`);
   }
 
   async exportMealPlanIcs(id: string): Promise<Blob> {

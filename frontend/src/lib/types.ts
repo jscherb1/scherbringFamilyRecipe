@@ -281,6 +281,13 @@ export interface TodoistExportResponse {
   message: string;
 }
 
+// Enhanced ingredient export response with AI information
+export interface IngredientExportResponse {
+  ingredients: string;
+  ai_consolidation_used?: boolean;
+  consolidation_method?: string;
+}
+
 // Google Calendar Integration Types
 export interface GoogleCalendar {
   id: string;

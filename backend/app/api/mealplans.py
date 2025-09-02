@@ -14,6 +14,7 @@ from app.services.planner import MealPlannerService
 from app.services.exports import ExportService
 from app.services.todoist import todoist_service
 from app.services.google_calendar import GoogleCalendarService
+from app.services.ai_ingredient_consolidator import ai_ingredient_consolidator
 from app.deps import get_recipe_repository
 
 logger = logging.getLogger(__name__)
@@ -245,7 +246,11 @@ async def export_consolidated_ingredients(meal_plan_id: str):
         
         ingredients_text = await export_service.export_consolidated_ingredients(meal_plan)
         
-        return {"ingredients": ingredients_text}
+        return {
+            "ingredients": ingredients_text,
+            "ai_consolidation_used": ai_ingredient_consolidator.is_available(),
+            "consolidation_method": "AI-powered grocery intelligence" if ai_ingredient_consolidator.is_available() else "Basic pattern matching"
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -262,11 +267,34 @@ async def export_consolidated_ingredients_with_staples(meal_plan_id: str):
         
         ingredients_text = await export_service.export_consolidated_ingredients_with_staples(meal_plan)
         
-        return {"ingredients": ingredients_text}
+        return {
+            "ingredients": ingredients_text,
+            "ai_consolidation_used": ai_ingredient_consolidator.is_available(),
+            "consolidation_method": "AI-powered grocery intelligence" if ai_ingredient_consolidator.is_available() else "Basic pattern matching"
+        }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error exporting consolidated ingredients with staples {meal_plan_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.get("/{meal_plan_id}/export/ingredients/ai-status")
+async def get_ai_consolidation_status(meal_plan_id: str):
+    """Get the status of AI-powered ingredient consolidation"""
+    try:
+        meal_plan = await meal_plan_repo.get_meal_plan(meal_plan_id)
+        if not meal_plan:
+            raise HTTPException(status_code=404, detail="Meal plan not found")
+        
+        return {
+            "ai_available": ai_ingredient_consolidator.is_available(),
+            "feature_enabled": ai_ingredient_consolidator.is_available(),
+            "consolidation_method": "AI-powered grocery intelligence" if ai_ingredient_consolidator.is_available() else "Basic text matching"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting AI consolidation status for {meal_plan_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/{meal_plan_id}/export.ics")

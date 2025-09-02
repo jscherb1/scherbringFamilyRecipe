@@ -10,6 +10,7 @@ from app.models.meal_plan import MealPlan
 from app.models.recipe import Recipe
 from app.repositories.recipes import recipe_repository
 from app.repositories.profile import ProfileRepository
+from app.services.ai_ingredient_consolidator import ai_ingredient_consolidator
 
 logger = logging.getLogger(__name__)
 
@@ -143,25 +144,57 @@ class ExportService:
         # Get recipes for the meal plan
         recipe_map = await self._get_recipe_map(meal_plan)
         
-        # Collect and consolidate ingredients
-        ingredient_counts = defaultdict(int)
-        ingredient_base_names = {}  # Track the base name for similar ingredients
-        
+        # Collect all ingredients from all recipes
+        all_ingredients = []
         for entry in meal_plan.entries:
             recipe = recipe_map.get(entry.recipe_id) if entry.recipe_id else None
             
             if recipe:
                 shopping_ingredients = recipe.get_ingredients_for_shopping_list()
+                all_ingredients.extend(shopping_ingredients)
+        
+        if not all_ingredients:
+            return ""
+        
+        # Use AI consolidation if available, otherwise fall back to manual consolidation
+        if ai_ingredient_consolidator.is_available():
+            try:
+                logger.info("Using AI-powered ingredient consolidation")
+                consolidated_results = await ai_ingredient_consolidator.consolidate_ingredients(all_ingredients)
                 
-                for ingredient in shopping_ingredients:
-                    # Normalize ingredient for consolidation
-                    normalized = self._normalize_ingredient(ingredient)
-                    base_name = self._extract_base_ingredient(normalized)
+                # Format for todo app (no headers or blank lines for easy copy-paste)
+                lines = []
+                for result in consolidated_results:
+                    ingredient = result["ingredient"]
+                    quantity = result["quantity"]
                     
-                    if base_name not in ingredient_base_names:
-                        ingredient_base_names[base_name] = ingredient
-                    
-                    ingredient_counts[base_name] += 1
+                    # Format the line based on quantity information
+                    if quantity and quantity != "1 recipe":
+                        lines.append(f"{ingredient} ({quantity})")
+                    else:
+                        lines.append(ingredient)
+                
+                logger.info(f"AI consolidation produced {len(lines)} consolidated ingredients from {len(all_ingredients)} original ingredients")
+                return "\n".join(lines)
+                
+            except Exception as e:
+                logger.error(f"AI consolidation failed, falling back to manual consolidation: {e}")
+                # Fall through to manual consolidation
+        
+        # Manual consolidation fallback (preserves existing functionality)
+        logger.info("Using manual ingredient consolidation")
+        ingredient_counts = defaultdict(int)
+        ingredient_base_names = {}  # Track the base name for similar ingredients
+        
+        for ingredient in all_ingredients:
+            # Normalize ingredient for consolidation
+            normalized = self._normalize_ingredient(ingredient)
+            base_name = self._extract_base_ingredient(normalized)
+            
+            if base_name not in ingredient_base_names:
+                ingredient_base_names[base_name] = ingredient
+            
+            ingredient_counts[base_name] += 1
         
         # Format for todo app (no headers or blank lines for easy copy-paste)
         lines = []
@@ -188,25 +221,61 @@ class ExportService:
         profile = await self.profile_repo.get_profile()
         staple_groceries = profile.staple_groceries if profile else []
         
-        # Collect and consolidate ingredients
-        ingredient_counts = defaultdict(int)
-        ingredient_base_names = {}  # Track the base name for similar ingredients
-        
-        # Add meal plan ingredients
+        # Collect all ingredients from meal plan recipes
+        meal_plan_ingredients = []
         for entry in meal_plan.entries:
             recipe = recipe_map.get(entry.recipe_id) if entry.recipe_id else None
             
             if recipe:
                 shopping_ingredients = recipe.get_ingredients_for_shopping_list()
-                for ingredient in shopping_ingredients:
-                    # Normalize ingredient for consolidation
-                    normalized = self._normalize_ingredient(ingredient)
-                    base_name = self._extract_base_ingredient(normalized)
+                meal_plan_ingredients.extend(shopping_ingredients)
+        
+        # Combine meal plan ingredients with staples for AI consolidation
+        all_ingredients = meal_plan_ingredients + staple_groceries
+        
+        if not all_ingredients:
+            return ""
+        
+        # Use AI consolidation if available, otherwise fall back to manual consolidation
+        if ai_ingredient_consolidator.is_available():
+            try:
+                logger.info("Using AI-powered ingredient consolidation (with staples)")
+                consolidated_results = await ai_ingredient_consolidator.consolidate_ingredients(all_ingredients)
+                
+                # Format for todo app (no headers or blank lines for easy copy-paste)
+                lines = []
+                for result in consolidated_results:
+                    ingredient = result["ingredient"]
+                    quantity = result["quantity"]
                     
-                    if base_name not in ingredient_base_names:
-                        ingredient_base_names[base_name] = ingredient
-                    
-                    ingredient_counts[base_name] += 1
+                    # Format the line based on quantity information
+                    if quantity and quantity != "1 recipe":
+                        lines.append(f"{ingredient} ({quantity})")
+                    else:
+                        lines.append(ingredient)
+                
+                logger.info(f"AI consolidation (with staples) produced {len(lines)} consolidated ingredients from {len(all_ingredients)} original ingredients")
+                return "\n".join(lines)
+                
+            except Exception as e:
+                logger.error(f"AI consolidation with staples failed, falling back to manual consolidation: {e}")
+                # Fall through to manual consolidation
+        
+        # Manual consolidation fallback (preserves existing functionality)
+        logger.info("Using manual ingredient consolidation (with staples)")
+        ingredient_counts = defaultdict(int)
+        ingredient_base_names = {}  # Track the base name for similar ingredients
+        
+        # Add meal plan ingredients
+        for ingredient in meal_plan_ingredients:
+            # Normalize ingredient for consolidation
+            normalized = self._normalize_ingredient(ingredient)
+            base_name = self._extract_base_ingredient(normalized)
+            
+            if base_name not in ingredient_base_names:
+                ingredient_base_names[base_name] = ingredient
+            
+            ingredient_counts[base_name] += 1
         
         # Add staple groceries (avoiding duplicates)
         staple_items = []
@@ -222,18 +291,18 @@ class ExportService:
         lines = []
         
         # Add meal plan ingredients first
-        meal_plan_ingredients = []
+        meal_plan_ingredient_lines = []
         for base_name in sorted(ingredient_counts.keys()):
             count = ingredient_counts[base_name]
             original_ingredient = ingredient_base_names[base_name]
             
             if count > 1:
-                meal_plan_ingredients.append(f"{original_ingredient} (needed for {count} recipes)")
+                meal_plan_ingredient_lines.append(f"{original_ingredient} (needed for {count} recipes)")
             else:
-                meal_plan_ingredients.append(f"{original_ingredient}")
+                meal_plan_ingredient_lines.append(f"{original_ingredient}")
         
-        if meal_plan_ingredients:
-            lines.extend(meal_plan_ingredients)
+        if meal_plan_ingredient_lines:
+            lines.extend(meal_plan_ingredient_lines)
         
         # Add staple items
         if staple_items:
